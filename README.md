@@ -1,211 +1,252 @@
-# FileCognize - 订购单识别转Excel工具
+# 文件整理工具
 
-一个现代化的订购单图片识别和Excel转换工具，支持通过网页界面上传图片或调用摄像头拍摄订购单，自动识别内容并转换为Excel格式。
+一个现代化的文件整理工具，支持图片和PDF文件的智能识别，将内容转换为标准Excel表格。支持自定义模板，提供便捷的文件管理解决方案。
 
-## 🚀 功能特点
+## ✨ 功能特性
 
-### 核心功能
-- **图片上传/相机调用**: 支持拖拽上传、文件选择和设备相机拍摄
-- **OCR识别**: 使用Tesseract.js进行中英文文字识别
-- **内容解析**: 智能提取订单号、供应商、商品信息等结构化数据
-- **Excel生成**: 生成标准格式的Excel文件，支持自定义文件名和工作表名
-- **数据校正**: 支持手动编辑识别结果，确保数据准确性
+### 🔍 智能识别
+- **多格式支持**：支持图片文件（JPG、PNG、GIF、BMP、WEBP）和PDF文档
+- **OCR识别**：使用Tesseract.js进行图片文字识别（支持中英文）
+- **PDF解析**：自动提取PDF文档中的文本内容
+- **智能解析**：自动识别订单号、供应商、商品信息等结构化数据
 
-### 附加功能
-- **实时预览**: 上传后即时预览图片和识别进度
-- **多格式支持**: 支持JPG、PNG、GIF、BMP、WEBP等常见图片格式
-- **响应式设计**: 支持PC和移动端访问
-- **数据导出**: 支持Excel和JSON格式导出
-- **安全性**: 临时文件自动清理，文件大小限制
+### 📋 模板管理
+- **模板上传**：支持Excel和JSON格式的自定义模板
+- **模板选择**：可选择不同的输出模板定义数据格式
+- **模板复用**：一次上传，多次使用，提高工作效率
+
+### 📊 数据处理
+- **手动编辑**：支持对识别结果进行手动编辑和校正
+- **结构化数据**：自动整理为订单号、供应商、商品清单等结构
+- **数据验证**：自动计算总价和统计信息
+
+### 💾 多格式导出
+- **Excel导出**：生成标准Excel文件，支持多工作表
+- **JSON导出**：导出标准JSON格式数据
+- **自定义格式**：根据选择的模板生成对应格式的文件
+
+### 🎨 用户体验
+- **响应式设计**：支持PC和移动端访问
+- **实时预览**：实时显示识别进度和结果预览
+- **拖拽上传**：支持拖拽文件上传和相机拍摄
+- **错误提示**：友好的错误提示和操作引导
 
 ## 🛠️ 技术栈
 
 ### 前端
-- React 18 + TypeScript
-- Tailwind CSS (样式框架)
-- Tesseract.js (OCR识别)
-- xlsx.js (Excel生成)
-- react-dropzone (文件上传)
-- react-hot-toast (消息提示)
+- **React 18** + **TypeScript** - 现代化的前端框架
+- **Tailwind CSS** - 原子化CSS框架
+- **Tesseract.js** - 客户端OCR识别
+- **xlsx.js** - Excel文件生成
+- **react-dropzone** - 文件拖拽上传
+- **react-hot-toast** - 消息提示组件
 
 ### 后端
-- Node.js + Express
-- Multer (文件上传处理)
-- Helmet (安全中间件)
-- CORS (跨域支持)
-- Rate Limiting (请求限制)
+- **Node.js** + **Express** - 轻量级服务器框架
+- **Multer** - 文件上传处理
+- **pdf-parse** - PDF文档解析
+- **Helmet** - 安全中间件
+- **CORS** - 跨域资源共享
+- **express-rate-limit** - 请求频率限制
 
-### 部署
-- GitHub (代码托管)
-- Railway (云部署)
-
-## 📦 安装和运行
+## 🚀 快速开始
 
 ### 环境要求
-- Node.js >= 16.0.0
-- npm >= 8.0.0
+- Node.js 18.x 或更高版本
+- npm 8.0.0 或更高版本
 
 ### 本地开发
 
-1. **克隆仓库**
+1. **克隆项目**
 ```bash
-git clone https://github.com/your-username/filecognize.git
-cd filecognize
+git clone https://github.com/minzf581/FileCognize.git
+cd FileCognize
 ```
 
 2. **安装依赖**
 ```bash
-# 安装后端依赖
 npm install
-
-# 安装前端依赖
-npm run install-client
+cd client && npm install && cd ..
 ```
 
 3. **启动开发服务器**
 ```bash
-# 同时启动前后端开发服务器
 npm run dev
-
-# 或分别启动
-npm run server  # 后端 (端口5000)
-npm run client  # 前端 (端口3000)
 ```
 
 4. **访问应用**
-   - 前端: http://localhost:3000
-   - 后端API: http://localhost:5000
+- 前端：http://localhost:3000
+- 后端：http://localhost:5000
 
 ### 生产部署
 
 1. **构建前端**
 ```bash
+cd client
 npm run build
+cd ..
 ```
 
 2. **启动生产服务器**
 ```bash
-npm start
+NODE_ENV=production npm start
 ```
 
-## 🎯 使用说明
+### Railway部署
 
-### 基本流程
-1. **上传图片**: 拖拽图片到上传区域或点击选择文件，也可以使用相机拍摄
-2. **OCR识别**: 系统自动进行文字识别，显示识别进度
-3. **数据校正**: 检查并编辑识别结果，确保数据准确
-4. **生成Excel**: 配置文件名和工作表名，下载Excel文件
+[![Deploy on Railway](https://railway.app/button.svg)](https://railway.app/new/template/your-template)
 
-### 支持的图片格式
-- JPEG/JPG
-- PNG
-- GIF
-- BMP
-- WEBP
+项目已配置好Railway部署，只需：
+1. 连接GitHub仓库
+2. 自动部署完成
 
-### 文件大小限制
-- 最大文件大小: 10MB
-- 建议图片清晰度高，文字内容清晰可见
+## 📖 使用指南
 
-## 📋 API文档
+### 基本使用流程
 
-### 上传接口
-```http
-POST /api/upload
-Content-Type: multipart/form-data
+1. **上传文件**
+   - 点击上传区域选择文件
+   - 拖拽文件到上传区域
+   - 使用相机拍摄（移动端）
+   - 支持图片和PDF格式
 
-参数:
-- image: 图片文件
+2. **选择模板**（可选）
+   - 上传Excel或JSON模板文件
+   - 选择已有模板定义输出格式
+   - 模板将影响最终导出的数据结构
 
-响应:
-{
-  "success": true,
-  "message": "文件上传成功",
-  "file": {
-    "filename": "upload_1234567890.jpg",
-    "originalname": "order.jpg",
-    "size": 1048576,
-    "path": "/path/to/file"
-  }
-}
-```
+3. **内容识别**
+   - 图片文件自动进行OCR识别
+   - PDF文件自动提取文本内容
+   - 查看识别进度和结果
 
-### 健康检查
-```http
-GET /api/health
+4. **编辑数据**
+   - 手动编辑识别的文本内容
+   - 修改解析后的结构化数据
+   - 添加或删除商品项目
 
-响应:
-{
-  "status": "OK",
-  "timestamp": "2024-01-01T00:00:00.000Z"
-}
-```
+5. **导出文件**
+   - 下载Excel格式文件
+   - 导出JSON格式数据
+   - 重新开始处理新文件
+
+### 支持的文件格式
+
+#### 输入文件
+- **图片格式**：JPG、JPEG、PNG、GIF、BMP、WEBP
+- **PDF文档**：标准PDF文件（支持文本提取）
+
+#### 模板文件
+- **Excel模板**：.xlsx、.xls格式
+- **JSON模板**：.json格式
+
+#### 输出文件
+- **Excel文件**：.xlsx格式，包含多个工作表
+- **JSON数据**：标准JSON格式，包含完整的结构化数据
+
+### API端点
+
+| 端点 | 方法 | 描述 |
+|------|------|------|
+| `/api/upload` | POST | 上传文件（图片/PDF/模板） |
+| `/api/templates` | GET | 获取模板列表 |
+| `/api/templates/:filename` | DELETE | 删除指定模板 |
+| `/api/health` | GET | 健康检查 |
 
 ## 🔧 配置说明
 
 ### 环境变量
-```env
-NODE_ENV=production
-PORT=5000
-ALLOWED_ORIGINS=https://your-domain.com
-OCR_MAX_FILE_SIZE=10485760
-TEMP_FILE_CLEANUP_TIME=30
-```
 
-### 安全特性
-- 文件类型验证
-- 文件大小限制
-- 请求频率限制
-- 自动清理临时文件
-- CORS配置
-- Helmet安全头
-
-## 🚀 部署到Railway
-
-1. **推送到GitHub**
 ```bash
-git add .
-git commit -m "Initial commit"
-git push origin main
+# 服务器端口
+PORT=5000
+
+# 运行环境
+NODE_ENV=production
+
+# 禁用生成源映射（生产环境）
+GENERATE_SOURCEMAP=false
+
+# 禁用CI模式（避免警告错误）
+CI=false
 ```
 
-2. **连接Railway**
-   - 登录 [Railway](https://railway.app)
-   - 创建新项目
-   - 连接GitHub仓库
+### 文件限制
 
-3. **配置环境变量**
-   - 在Railway控制台设置环境变量
-   - 设置 `NODE_ENV=production`
+- **最大文件大小**：10MB
+- **模板文件类型**：Excel (.xlsx, .xls), JSON (.json)
+- **输入文件类型**：图片 (image/*), PDF (application/pdf)
+- **临时文件清理**：30分钟自动删除
 
-4. **自动部署**
-   - Railway会自动检测并部署应用
-   - 访问分配的域名
+## 🏗️ 项目结构
+
+```
+FileCognize/
+├── client/                 # 前端应用
+│   ├── public/            # 静态资源
+│   │   ├── components/    # React组件
+│   │   │   ├── Header.tsx          # 应用头部
+│   │   │   ├── ImageUploader.tsx   # 文件上传组件
+│   │   │   ├── OCRProcessor.tsx    # 文件识别处理
+│   │   │   ├── ExcelGenerator.tsx  # Excel生成组件
+│   │   │   └── TemplateManager.tsx # 模板管理组件
+│   │   ├── types/         # TypeScript类型定义
+│   │   ├── App.tsx        # 主应用组件
+│   │   └── index.tsx      # 应用入口
+│   ├── package.json       # 前端依赖配置
+│   └── tailwind.config.js # Tailwind配置
+├── server/                # 后端服务
+│   └── server.js          # Express服务器
+├── docs/                  # 文档目录
+├── package.json           # 项目配置
+├── railway.json           # Railway部署配置
+├── nixpacks.toml          # Nixpacks构建配置
+└── README.md             # 项目说明
+```
 
 ## 🤝 贡献指南
 
-1. Fork 项目
-2. 创建功能分支 (`git checkout -b feature/AmazingFeature`)
+1. Fork本仓库
+2. 创建特性分支 (`git checkout -b feature/AmazingFeature`)
 3. 提交更改 (`git commit -m 'Add some AmazingFeature'`)
 4. 推送到分支 (`git push origin feature/AmazingFeature`)
-5. 开启 Pull Request
+5. 创建Pull Request
 
-## 📝 许可证
+## 📝 更新日志
+
+### v1.1.0 (2024-01-XX)
+- 🆕 增加PDF文件支持
+- 🆕 新增模板管理功能
+- 🆕 支持自定义输出格式
+- 💅 更新UI设计，改名为"文件整理"
+- 🔧 优化文件处理流程
+- 🐛 修复多项已知问题
+
+### v1.0.0 (2024-01-XX)
+- 🎉 初始版本发布
+- ✨ 支持图片OCR识别
+- ✨ Excel文件生成
+- ✨ 响应式设计
+- ✨ Railway部署支持
+
+## 📄 许可证
 
 本项目采用 MIT 许可证 - 查看 [LICENSE](LICENSE) 文件了解详情
 
-## ⚠️ 注意事项
+## 🌟 致谢
 
-- OCR识别准确率取决于图片质量
-- 建议上传清晰、对比度高的图片
-- 复杂格式的订购单可能需要手动调整识别结果
-- 临时文件会在30分钟后自动删除
+- [Tesseract.js](https://tesseract.projectnaptha.com/) - 优秀的JavaScript OCR库
+- [React](https://reactjs.org/) - 强大的前端框架
+- [Tailwind CSS](https://tailwindcss.com/) - 现代化的CSS框架
+- [Express](https://expressjs.com/) - 快速的Node.js服务器框架
 
 ## 📞 联系方式
 
-- 项目地址: https://github.com/your-username/filecognize
-- 问题反馈: https://github.com/your-username/filecognize/issues
+如有问题或建议，请通过以下方式联系：
+
+- GitHub Issues: [提交问题](https://github.com/minzf581/FileCognize/issues)
+- 项目地址: https://github.com/minzf581/FileCognize
 
 ---
 
-**FileCognize** - 让订购单数字化变得简单高效！ 
+⭐ 如果这个项目对您有帮助，请给我们一个星标！ 

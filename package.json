@@ -1,7 +1,7 @@
 {
-  "name": "filecognize",
+  "name": "file-organizer",
   "version": "1.0.0",
-  "description": "订购单图片识别转Excel表格工具",
+  "description": "文件整理工具 - 支持图片和PDF文件识别转Excel表格",
   "main": "server/server.js",
   "scripts": {
     "dev": "concurrently \"npm run server\" \"npm run client\"",
@@ -12,32 +12,34 @@
     "test": "node test-app.js"
   },
   "dependencies": {
-    "express": "^4.18.2",
     "cors": "^2.8.5",
-    "multer": "^1.4.5-lts.1",
-    "helmet": "^7.1.0",
     "dotenv": "^16.3.1",
-    "express-rate-limit": "^7.1.5"
+    "express": "^4.18.2",
+    "express-rate-limit": "^7.1.5",
+    "helmet": "^7.1.0",
+    "multer": "^1.4.5-lts.1",
+    "pdf-parse": "^1.1.1"
   },
   "devDependencies": {
-    "nodemon": "^3.0.2",
-    "concurrently": "^8.2.2"
+    "concurrently": "^8.2.2",
+    "nodemon": "^3.0.2"
   },
   "engines": {
     "node": "18.x",
     "npm": ">=8.0.0"
   },
   "keywords": [
+    "文件整理",
     "ocr",
     "excel",
-    "订购单",
+    "pdf",
     "图片识别",
     "tesseract",
     "react",
     "express",
     "typescript"
   ],
-  "author": "FileCognize Team",
+  "author": "File Organizer Team",
   "license": "MIT",
   "repository": {
     "type": "git",
@@ -47,4 +49,4 @@
     "url": "https://github.com/minzf581/FileCognize/issues"
   },
   "homepage": "https://github.com/minzf581/FileCognize#readme"
-} 
+}

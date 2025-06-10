@@ -5,6 +5,7 @@ const rateLimit = require('express-rate-limit');
 const multer = require('multer');
 const path = require('path');
 const fs = require('fs');
+const pdfParse = require('pdf-parse');
 require('dotenv').config();
 
 const app = express();
@@ -39,15 +40,24 @@ if (!fs.existsSync(uploadsDir)) {
   fs.mkdirSync(uploadsDir, { recursive: true });
 }
 
+// 创建templates目录
+const templatesDir = path.join(__dirname, 'templates');
+if (!fs.existsSync(templatesDir)) {
+  fs.mkdirSync(templatesDir, { recursive: true });
+}
+
 // Multer配置 - 文件上传
 const storage = multer.diskStorage({
   destination: (req, file, cb) => {
-    cb(null, uploadsDir);
+    const uploadType = req.body.uploadType || 'upload';
+    const targetDir = uploadType === 'template' ? templatesDir : uploadsDir;
+    cb(null, targetDir);
   },
   filename: (req, file, cb) => {
     const timestamp = Date.now();
     const ext = path.extname(file.originalname);
-    cb(null, `upload_${timestamp}${ext}`);
+    const prefix = req.body.uploadType === 'template' ? 'template' : 'upload';
+    cb(null, `${prefix}_${timestamp}${ext}`);
   }
 });
 
@@ -57,17 +67,31 @@ const upload = multer({
     fileSize: 10 * 1024 * 1024 // 10MB限制
   },
   fileFilter: (req, file, cb) => {
-    // 只允许图片文件
-    if (file.mimetype.startsWith('image/')) {
-      cb(null, true);
+    const uploadType = req.body.uploadType || 'upload';
+    
+    if (uploadType === 'template') {
+      // 模板文件支持Excel和JSON
+      if (file.mimetype.includes('spreadsheet') || 
+          file.mimetype.includes('excel') || 
+          file.mimetype === 'application/json' ||
+          file.originalname.match(/\.(xlsx|xls|json)$/i)) {
+        cb(null, true);
+      } else {
+        cb(new Error('模板文件只支持Excel(.xlsx, .xls)和JSON格式'), false);
+      }
     } else {
-      cb(new Error('只支持图片格式文件'), false);
+      // 普通文件支持图片和PDF
+      if (file.mimetype.startsWith('image/') || file.mimetype === 'application/pdf') {
+        cb(null, true);
+      } else {
+        cb(new Error('只支持图片格式文件和PDF文件'), false);
+      }
     }
   }
 });
 
-// API路由
-app.post('/api/upload', upload.single('image'), (req, res) => {
+// 文件上传API
+app.post('/api/upload', upload.single('file'), async (req, res) => {
   try {
     if (!req.file) {
       return res.status(400).json({ error: '没有上传文件' });
@@ -77,8 +101,23 @@ app.post('/api/upload', upload.single('image'), (req, res) => {
       filename: req.file.filename,
       originalname: req.file.originalname,
       size: req.file.size,
-      path: req.file.path
+      path: req.file.path,
+      mimetype: req.file.mimetype
     };
+
+    // 如果是PDF文件，尝试提取文本
+    if (req.file.mimetype === 'application/pdf') {
+      try {
+        const pdfBuffer = fs.readFileSync(req.file.path);
+        const pdfData = await pdfParse(pdfBuffer);
+        fileInfo.extractedText = pdfData.text;
+        fileInfo.pageCount = pdfData.numpages;
+      } catch (pdfError) {
+        console.error('PDF解析错误:', pdfError);
+        fileInfo.extractedText = '';
+        fileInfo.pdfError = 'PDF解析失败，请尝试其他文件';
+      }
+    }
 
     res.json({
       success: true,
@@ -96,6 +135,47 @@ app.post('/api/upload', upload.single('image'), (req, res) => {
   } catch (error) {
     console.error('文件上传错误:', error);
     res.status(500).json({ error: '文件上传失败' });
+  }
+});
+
+// 模板管理API
+app.get('/api/templates', (req, res) => {
+  try {
+    const templates = fs.readdirSync(templatesDir)
+      .filter(file => file.match(/\.(xlsx|xls|json)$/i))
+      .map(file => {
+        const filePath = path.join(templatesDir, file);
+        const stats = fs.statSync(filePath);
+        return {
+          filename: file,
+          originalname: file.replace(/^template_\d+_/, ''),
+          size: stats.size,
+          uploadTime: stats.mtime
+        };
+      });
+    
+    res.json({ templates });
+  } catch (error) {
+    console.error('获取模板列表错误:', error);
+    res.status(500).json({ error: '获取模板列表失败' });
+  }
+});
+
+// 删除模板API
+app.delete('/api/templates/:filename', (req, res) => {
+  try {
+    const filename = req.params.filename;
+    const filePath = path.join(templatesDir, filename);
+    
+    if (fs.existsSync(filePath)) {
+      fs.unlinkSync(filePath);
+      res.json({ success: true, message: '模板删除成功' });
+    } else {
+      res.status(404).json({ error: '模板文件不存在' });
+    }
+  } catch (error) {
+    console.error('删除模板错误:', error);
+    res.status(500).json({ error: '删除模板失败' });
   }
 });
 
@@ -156,7 +236,7 @@ app.use((req, res) => {
 
 // 启动服务器
 app.listen(PORT, () => {
-  console.log(`服务器运行在端口 ${PORT}`);
+  console.log(`文件整理服务器运行在端口 ${PORT}`);
 });
 
 module.exports = app; 
