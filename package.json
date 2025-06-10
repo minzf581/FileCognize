@@ -7,10 +7,12 @@
     "dev": "concurrently \"npm run server\" \"npm run client\"",
     "server": "nodemon server/server.js",
     "client": "cd client && npm start",
-    "build": "cd client && npm run build",
+    "build": "cd client && npm run build --max_old_space_size=1024",
+    "build:production": "cd client && CI=false npm run build --max_old_space_size=1024",
     "start": "node server/server.js",
-    "install-client": "cd client && npm install",
-    "heroku-postbuild": "npm run install-client && npm run build",
+    "install-client": "cd client && npm install --legacy-peer-deps",
+    "heroku-postbuild": "npm run install-client && npm run build:production",
+    "railway-build": "npm run install-client && npm run build:production",
     "test": "node test-app.js",
     "verify": "node test-app.js",
     "audit": "npm audit && cd client && npm audit"
@@ -29,7 +31,7 @@
     "concurrently": "^8.2.2"
   },
   "engines": {
-    "node": ">=16.0.0",
+    "node": "18.x",
     "npm": ">=8.0.0"
   },
   "keywords": [

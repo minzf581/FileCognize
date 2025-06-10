@@ -1,0 +1,20 @@
+[phases.setup]
+nixPkgs = ['nodejs-18_x', 'npm-9_x']
+
+[phases.install]
+cmds = [
+  'npm ci --cache /tmp/empty-cache',
+]
+
+[phases.build]
+cmds = [
+  'npm run railway-build'
+]
+
+[start]
+cmd = 'npm start'
+
+[variables]
+NODE_ENV = 'production'
+CI = 'false'
+NODE_OPTIONS = '--max_old_space_size=1024' 

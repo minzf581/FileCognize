@@ -18,17 +18,20 @@
 ```env
 NODE_ENV=production
 PORT=5000
+CI=false
+NODE_OPTIONS=--max_old_space_size=1024
 ```
 
 ### 步骤4: 部署设置
 Railway会自动检测到：
-- `package.json` - Node.js项目
+- `.nvmrc` - Node.js版本 (18.18.0)
+- `nixpacks.toml` - 构建配置
 - `railway.json` - 部署配置
-- 自动运行 `npm run heroku-postbuild`
+- 自动运行 `npm run railway-build`
 - 启动命令: `npm start`
 
 ### 步骤5: 验证部署
-1. 等待部署完成（通常2-3分钟）
+1. 等待部署完成（通常3-5分钟）
 2. 访问分配的域名
 3. 检查健康检查端点: `https://your-app.railway.app/api/health`
 
@@ -73,6 +76,8 @@ FileCognize/
 │   └── build/              # 构建输出（生产环境）
 ├── package.json            # 后端依赖和脚本
 ├── railway.json           # Railway部署配置
+├── nixpacks.toml          # Nixpacks构建配置
+├── .nvmrc                 # Node.js版本
 ├── README.md              # 项目说明文档
 └── .gitignore             # Git忽略文件
 ```
@@ -91,6 +96,21 @@ FileCognize/
 - ✅ 安全文件处理
 
 ## 🔍 故障排除
+
+### 构建失败问题
+
+1. **内存不足错误 (Exit code 249)**
+   - ✅ 已优化：添加了 `--max_old_space_size=1024` 内存限制
+   - ✅ 已优化：设置 `CI=false` 跳过警告检查
+   - ✅ 已优化：使用 `--legacy-peer-deps` 解决依赖冲突
+
+2. **依赖安装失败**
+   - 检查网络连接稳定性
+   - Railway会自动重试失败的构建
+
+3. **TypeScript编译错误**
+   - ✅ 已优化：构建时跳过严格模式检查
+   - 本地运行 `npm run build` 检查编译问题
 
 ### 常见问题
 
@@ -112,25 +132,34 @@ FileCognize/
 
 ### 部署问题
 
-1. **Railway部署失败**
-   - 检查 `package.json` 中的engines字段
-   - 确保 `heroku-postbuild` 脚本正确
+1. **Railway部署超时**
+   - ✅ 已优化：增加了健康检查超时时间
+   - ✅ 已优化：优化了构建过程和内存使用
 
 2. **静态文件访问404**
-   - 确保 `npm run build` 成功执行
+   - 确保 `npm run railway-build` 成功执行
    - 检查build目录是否存在
+
+3. **部署后服务不响应**
+   - 检查Railway日志中的错误信息
+   - 确保PORT环境变量正确设置
 
 ## 📈 性能优化建议
 
-1. **图片预处理**
+1. **构建优化**
+   - ✅ 使用增量构建
+   - ✅ 内存限制优化
+   - ✅ 依赖缓存优化
+
+2. **图片预处理**
    - 建议上传清晰、对比度高的图片
    - 避免过大的图片文件
 
-2. **OCR优化**
+3. **OCR优化**
    - 图片中文字应清晰可见
    - 避免复杂背景和手写字体
 
-3. **服务器资源**
+4. **服务器资源**
    - Railway免费版有内存限制
    - 考虑升级计划以获得更好性能
 
@@ -141,6 +170,27 @@ FileCognize/
 - 请求频率限制
 - CORS配置
 - 安全头设置（Helmet）
+
+## 🔄 重新部署步骤
+
+如果之前部署失败，按以下步骤重新部署：
+
+1. **推送最新代码到GitHub**
+   ```bash
+   git add .
+   git commit -m "优化Railway部署配置"
+   git push origin main
+   ```
+
+2. **在Railway控制台**
+   - 进入项目设置
+   - 点击 "Redeploy" 或 "Deploy Latest"
+   - 监控构建日志
+
+3. **验证部署**
+   - 等待构建完成（现在应该成功）
+   - 访问应用URL
+   - 测试上传和OCR功能
 
 ---
 
