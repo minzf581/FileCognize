@@ -10,9 +10,9 @@
     "build": "cd client && npm run build",
     "build:production": "cd client && npm run build:production",
     "start": "node server/server.js",
-    "install-client": "cd client && npm install --legacy-peer-deps",
-    "heroku-postbuild": "npm run install-client && npm run build:production",
-    "railway-build": "npm run install-client && npm run build:production",
+    "install-client": "cd client && npm install",
+    "heroku-postbuild": "npm run install-client && npm run build",
+    "railway-build": "npm run install-client && npm run build",
     "test": "node test-app.js",
     "verify": "node test-app.js",
     "audit": "npm audit && cd client && npm audit"
