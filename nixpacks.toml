@@ -13,7 +13,9 @@ cmds = [
 
 [phases.build]
 cmds = [
-  'cd client && npm run build'
+  'echo "Ensuring build files are in correct location..."',
+  'if [ -d "build" ] && [ ! -d "client/build" ]; then cp -r build client/build; fi',
+  'ls -la client/ || echo "client directory check"'
 ]
 
 [start]

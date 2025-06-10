@@ -25,7 +25,7 @@ app.use(limiter);
 // CORS配置
 app.use(cors({
   origin: process.env.NODE_ENV === 'production' 
-    ? ['https://filecognize.up.railway.app'] 
+    ? true  // 允许所有来源，因为域名可能变化
     : ['http://localhost:3000'],
   credentials: true
 }));
@@ -106,11 +106,35 @@ app.get('/api/health', (req, res) => {
 
 // 生产环境下提供静态文件
 if (process.env.NODE_ENV === 'production') {
-  app.use(express.static(path.join(__dirname, '../client/build')));
+  // 尝试多个可能的构建文件位置
+  const buildPaths = [
+    path.join(__dirname, '../build'),        // 根目录的build文件夹
+    path.join(__dirname, '../client/build')  // client目录的build文件夹
+  ];
   
-  app.get('*', (req, res) => {
-    res.sendFile(path.join(__dirname, '../client/build', 'index.html'));
-  });
+  let buildPath = null;
+  for (const testPath of buildPaths) {
+    if (fs.existsSync(path.join(testPath, 'index.html'))) {
+      buildPath = testPath;
+      console.log(`找到构建文件在: ${buildPath}`);
+      break;
+    }
+  }
+  
+  if (buildPath) {
+    app.use(express.static(buildPath));
+    
+    app.get('*', (req, res) => {
+      res.sendFile(path.join(buildPath, 'index.html'));
+    });
+  } else {
+    console.error('未找到构建文件，检查以下路径:');
+    buildPaths.forEach(p => console.error(`- ${p}`));
+    
+    app.get('*', (req, res) => {
+      res.status(404).json({ error: '前端文件未找到，请检查构建配置' });
+    });
+  }
 }
 
 // 错误处理中间件
