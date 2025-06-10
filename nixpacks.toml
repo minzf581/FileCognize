@@ -3,12 +3,13 @@ nixPkgs = ['nodejs-18_x', 'npm-9_x']
 
 [phases.install]
 cmds = [
-  'npm ci --cache /tmp/empty-cache',
+  'npm install --omit=dev',
+  'cd client && npm install'
 ]
 
 [phases.build]
 cmds = [
-  'npm run railway-build'
+  'cd client && GENERATE_SOURCEMAP=false npm run build'
 ]
 
 [start]
@@ -17,4 +18,5 @@ cmd = 'npm start'
 [variables]
 NODE_ENV = 'production'
 CI = 'false'
+GENERATE_SOURCEMAP = 'false'
 NODE_OPTIONS = '--max_old_space_size=1024' 
