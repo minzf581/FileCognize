@@ -2,8 +2,8 @@
 node_modules/
 */node_modules/
 
-# Production builds
-/client/build
+# Production builds (commented out to allow prebuilt deployment)
+# /client/build
 /dist
 
 # Environment variables

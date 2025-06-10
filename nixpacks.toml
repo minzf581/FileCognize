@@ -2,15 +2,13 @@
 NODE_ENV = 'production'
 CI = 'false'
 GENERATE_SOURCEMAP = 'false'
-NODE_OPTIONS = '--max_old_space_size=512'
 
 [phases.setup]
 nixPkgs = ['nodejs-18_x']
 
 [phases.install]
 cmds = [
-  'npm install --production --no-audit --no-fund',
-  'cd client && npm install --no-audit --no-fund'
+  'npm install --omit=dev'
 ]
 
 [phases.build]
