@@ -19,16 +19,20 @@
 NODE_ENV=production
 PORT=5000
 CI=false
-NODE_OPTIONS=--max_old_space_size=1024
+GENERATE_SOURCEMAP=false
 ```
 
 ### 步骤4: 部署设置
-Railway会自动检测到：
-- `.nvmrc` - Node.js版本 (18.18.0)
-- `nixpacks.toml` - 构建配置
-- `railway.json` - 部署配置
-- 自动运行 `npm run railway-build`
+Railway支持多种构建方式：
+
+#### 方式1: NIXPACKS构建（推荐）
+- 自动检测到 `railway.json` 配置
+- 运行 `npm run railway-build`
 - 启动命令: `npm start`
+
+#### 方式2: Docker构建（备选）
+- 如果NIXPACKS失败，可以尝试使用Dockerfile
+- 在Railway设置中选择 "Use Dockerfile"
 
 ### 步骤5: 验证部署
 1. 等待部署完成（通常3-5分钟）
@@ -54,7 +58,7 @@ npm run client  # 前端 localhost:3000
 ### 生产环境测试
 ```bash
 # 构建前端
-npm run build
+npm run railway-build
 
 # 启动生产服务器
 npm start
@@ -76,7 +80,8 @@ FileCognize/
 │   └── build/              # 构建输出（生产环境）
 ├── package.json            # 后端依赖和脚本
 ├── railway.json           # Railway部署配置
-├── nixpacks.toml          # Nixpacks构建配置
+├── Dockerfile             # Docker构建配置（备选）
+├── .dockerignore          # Docker忽略文件
 ├── .nvmrc                 # Node.js版本
 ├── README.md              # 项目说明文档
 └── .gitignore             # Git忽略文件
@@ -97,20 +102,36 @@ FileCognize/
 
 ## 🔍 故障排除
 
-### 构建失败问题
+### Railway部署失败解决方案
 
-1. **内存不足错误 (Exit code 249)**
-   - ✅ 已优化：添加了 `--max_old_space_size=1024` 内存限制
-   - ✅ 已优化：设置 `CI=false` 跳过警告检查
-   - ✅ 已优化：使用 `--legacy-peer-deps` 解决依赖冲突
+#### 问题1: "npm run railway-build" exit code 249
+**解决方案**:
+1. **清除Railway缓存**
+   - 在Railway项目设置中点击 "Clear Cache"
+   - 或者删除项目重新创建
 
-2. **依赖安装失败**
-   - 检查网络连接稳定性
-   - Railway会自动重试失败的构建
+2. **检查环境变量**
+   ```env
+   NODE_ENV=production
+   PORT=5000
+   CI=false
+   GENERATE_SOURCEMAP=false
+   ```
 
-3. **TypeScript编译错误**
-   - ✅ 已优化：构建时跳过严格模式检查
-   - 本地运行 `npm run build` 检查编译问题
+3. **切换构建方式**
+   - 在Railway设置中尝试 "Use Dockerfile"
+   - 或修改 `railway.json` 中的 builder 设置
+
+#### 问题2: 内存不足错误
+**解决方案**:
+1. **升级Railway计划**：免费版内存限制较小
+2. **优化构建**：已设置 `GENERATE_SOURCEMAP=false`
+3. **清理依赖**：删除不必要的开发依赖
+
+#### 问题3: Tailwind CSS构建错误
+**解决方案**:
+- ✅ 已修复：使用Tailwind CSS 3.4.0版本
+- ✅ 已修复：添加了PostCSS配置文件
 
 ### 常见问题
 
@@ -150,6 +171,7 @@ FileCognize/
    - ✅ 使用增量构建
    - ✅ 内存限制优化
    - ✅ 依赖缓存优化
+   - ✅ 禁用源码映射减少构建时间
 
 2. **图片预处理**
    - 建议上传清晰、对比度高的图片
@@ -173,24 +195,43 @@ FileCognize/
 
 ## 🔄 重新部署步骤
 
-如果之前部署失败，按以下步骤重新部署：
+如果部署失败，按以下步骤重新部署：
 
-1. **推送最新代码到GitHub**
-   ```bash
-   git add .
-   git commit -m "优化Railway部署配置"
-   git push origin main
-   ```
-
-2. **在Railway控制台**
+### 方法1: 清除缓存重新部署
+1. **在Railway控制台**
    - 进入项目设置
-   - 点击 "Redeploy" 或 "Deploy Latest"
-   - 监控构建日志
+   - 点击 "Clear Cache"
+   - 点击 "Redeploy"
 
-3. **验证部署**
-   - 等待构建完成（现在应该成功）
-   - 访问应用URL
-   - 测试上传和OCR功能
+### 方法2: 删除项目重新创建
+1. **删除当前Railway项目**
+2. **重新从GitHub创建新项目**
+3. **重新配置环境变量**
+
+### 方法3: 本地验证
+```bash
+# 本地测试构建
+npm run railway-build
+
+# 如果成功，推送最新代码
+git add .
+git commit -m "修复部署问题"
+git push origin main
+```
+
+## 🚀 多种部署选项
+
+### 选项1: Railway (推荐)
+- 简单易用，GitHub集成
+- 免费额度足够小型项目
+
+### 选项2: Vercel (前端) + Railway (后端)
+- 分离部署，性能更好
+- 适合高流量应用
+
+### 选项3: Docker部署
+- 使用提供的Dockerfile
+- 可部署到任何支持Docker的平台
 
 ---
 
