@@ -1,0 +1,40 @@
+{
+  "name": "filecognize",
+  "version": "1.0.0",
+  "description": "订购单图片识别转Excel表格工具",
+  "main": "server.js",
+  "scripts": {
+    "dev": "concurrently \"npm run server\" \"npm run client\"",
+    "server": "nodemon server/server.js",
+    "client": "cd client && npm start",
+    "build": "cd client && npm run build",
+    "start": "node server/server.js",
+    "install-client": "cd client && npm install",
+    "heroku-postbuild": "npm run install-client && npm run build"
+  },
+  "dependencies": {
+    "express": "^4.18.2",
+    "cors": "^2.8.5",
+    "multer": "^1.4.5-lts.1",
+    "helmet": "^7.1.0",
+    "dotenv": "^16.3.1",
+    "express-rate-limit": "^7.1.5",
+    "node-tesseract-ocr": "^2.2.1"
+  },
+  "devDependencies": {
+    "nodemon": "^3.0.2",
+    "concurrently": "^8.2.2"
+  },
+  "engines": {
+    "node": ">=16.0.0",
+    "npm": ">=8.0.0"
+  },
+  "keywords": [
+    "ocr",
+    "excel",
+    "订购单",
+    "图片识别"
+  ],
+  "author": "FileCognize Team",
+  "license": "MIT"
+} 
