@@ -50,13 +50,40 @@ if (!fs.existsSync(templatesDir)) {
 const storage = multer.diskStorage({
   destination: (req, file, cb) => {
     const uploadType = req.body.uploadType || 'upload';
-    const targetDir = uploadType === 'template' ? templatesDir : uploadsDir;
+    let targetDir;
+    
+    switch (uploadType) {
+      case 'template':
+      case 'template_input':
+      case 'template_output':
+        targetDir = templatesDir;
+        break;
+      default:
+        targetDir = uploadsDir;
+    }
+    
     cb(null, targetDir);
   },
   filename: (req, file, cb) => {
     const timestamp = Date.now();
     const ext = path.extname(file.originalname);
-    const prefix = req.body.uploadType === 'template' ? 'template' : 'upload';
+    const uploadType = req.body.uploadType || 'upload';
+    
+    let prefix;
+    switch (uploadType) {
+      case 'template':
+        prefix = 'template';
+        break;
+      case 'template_input':
+        prefix = 'template_input';
+        break;
+      case 'template_output':
+        prefix = 'template_output';
+        break;
+      default:
+        prefix = 'upload';
+    }
+    
     cb(null, `${prefix}_${timestamp}${ext}`);
   }
 });
@@ -69,7 +96,7 @@ const upload = multer({
   fileFilter: (req, file, cb) => {
     const uploadType = req.body.uploadType || 'upload';
     
-    if (uploadType === 'template') {
+    if (uploadType === 'template' || uploadType === 'template_output') {
       // 模板文件支持Excel和JSON
       if (file.mimetype.includes('spreadsheet') || 
           file.mimetype.includes('excel') || 
@@ -78,6 +105,13 @@ const upload = multer({
         cb(null, true);
       } else {
         cb(new Error('模板文件只支持Excel(.xlsx, .xls)和JSON格式'), false);
+      }
+    } else if (uploadType === 'template_input') {
+      // 输入文件支持图片和PDF
+      if (file.mimetype.startsWith('image/') || file.mimetype === 'application/pdf') {
+        cb(null, true);
+      } else {
+        cb(new Error('输入文件只支持图片格式和PDF文件'), false);
       }
     } else {
       // 普通文件支持图片和PDF
@@ -161,14 +195,52 @@ app.get('/api/templates', (req, res) => {
   }
 });
 
+// 保存模板配置API
+app.post('/api/templates', (req, res) => {
+  try {
+    const { templateData } = req.body;
+    
+    if (!templateData || !templateData.filename) {
+      return res.status(400).json({ error: '模板数据不完整' });
+    }
+
+    // 保存模板配置到JSON文件
+    const configPath = path.join(templatesDir, `${templateData.filename}_config.json`);
+    fs.writeFileSync(configPath, JSON.stringify(templateData, null, 2));
+    
+    res.json({ 
+      success: true, 
+      message: '模板保存成功',
+      template: templateData
+    });
+  } catch (error) {
+    console.error('保存模板错误:', error);
+    res.status(500).json({ error: '保存模板失败' });
+  }
+});
+
 // 删除模板API
 app.delete('/api/templates/:filename', (req, res) => {
   try {
     const filename = req.params.filename;
     const filePath = path.join(templatesDir, filename);
+    const configPath = path.join(templatesDir, `${filename}_config.json`);
     
+    let deleted = false;
+    
+    // 删除模板文件
     if (fs.existsSync(filePath)) {
       fs.unlinkSync(filePath);
+      deleted = true;
+    }
+    
+    // 删除配置文件
+    if (fs.existsSync(configPath)) {
+      fs.unlinkSync(configPath);
+      deleted = true;
+    }
+    
+    if (deleted) {
       res.json({ success: true, message: '模板删除成功' });
     } else {
       res.status(404).json({ error: '模板文件不存在' });
