@@ -208,19 +208,35 @@ app.post('/api/upload', upload.single('file'), async (req, res) => {
     // 如果是PDF文件，尝试提取文本
     if (req.file.mimetype === 'application/pdf') {
       try {
+        console.log('开始解析PDF文件:', req.file.originalname);
         const pdfBuffer = fs.readFileSync(req.file.path);
+        console.log('PDF文件大小:', pdfBuffer.length, 'bytes');
+        
         const pdfData = await pdfParse(pdfBuffer);
+        console.log('PDF解析结果:');
+        console.log('- 页数:', pdfData.numpages);
+        console.log('- 文本长度:', pdfData.text.length);
+        console.log('- 前200个字符:', pdfData.text.substring(0, 200));
+        console.log('- 是否为空:', pdfData.text.trim().length === 0);
+        
         fileInfo.extractedText = pdfData.text;
         fileInfo.pageCount = pdfData.numpages;
+        
+        // 如果文本为空，提供提示
+        if (pdfData.text.trim().length === 0) {
+          fileInfo.pdfError = 'PDF文件为扫描版或无法提取文本内容，请尝试使用包含可选择文本的PDF文件';
+          console.log('警告: PDF文本提取为空');
+        }
         
         // 如果是输出模板PDF，额外提取结构信息
         if (req.body.uploadType === 'template_output') {
           fileInfo.templateStructure = analyzeTemplateStructure(pdfData.text);
+          console.log('模板结构分析完成:', fileInfo.templateStructure);
         }
       } catch (pdfError) {
         console.error('PDF解析错误:', pdfError);
         fileInfo.extractedText = '';
-        fileInfo.pdfError = 'PDF解析失败，请尝试其他文件';
+        fileInfo.pdfError = 'PDF解析失败: ' + pdfError.message;
       }
     }
 
