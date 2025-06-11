@@ -11,6 +11,71 @@ require('dotenv').config();
 const app = express();
 const PORT = process.env.PORT || 5000;
 
+// 分析模板结构的辅助函数
+function analyzeTemplateStructure(text) {
+  try {
+    const lines = text.split('\n').filter(line => line.trim().length > 0);
+    const structure = {
+      headers: [],
+      sections: [],
+      tables: [],
+      suggestedMapping: {}
+    };
+
+    // 查找表格标题和结构
+    const tableHeaders = [];
+    const tableIndicators = ['产品', '商品', '名称', '数量', '单价', '金额', '总计', '小计'];
+    
+    lines.forEach((line, index) => {
+      const trimmedLine = line.trim();
+      
+      // 识别可能的表格标题
+      if (tableIndicators.some(indicator => trimmedLine.includes(indicator))) {
+        tableHeaders.push({
+          line: trimmedLine,
+          index: index,
+          position: index
+        });
+      }
+      
+      // 识别章节标题
+      if (trimmedLine.length < 50 && (
+        trimmedLine.includes('信息') || 
+        trimmedLine.includes('明细') ||
+        trimmedLine.includes('汇总') ||
+        trimmedLine.match(/^\d+[.\s]/))) {
+        structure.sections.push({
+          title: trimmedLine,
+          position: index
+        });
+      }
+    });
+
+    structure.headers = tableHeaders;
+    
+    // 建议映射关系
+    if (tableHeaders.length > 0) {
+      structure.suggestedMapping = {
+        productNameColumn: 'A',
+        quantityColumn: 'B', 
+        unitPriceColumn: 'C',
+        totalPriceColumn: 'D',
+        startRow: tableHeaders[0].position + 2
+      };
+    }
+
+    return structure;
+  } catch (error) {
+    console.error('分析模板结构错误:', error);
+    return {
+      headers: [],
+      sections: [],
+      tables: [],
+      suggestedMapping: {}
+    };
+  }
+}
+
 // 安全中间件
 app.use(helmet({
   contentSecurityPolicy: false // 为了支持前端资源加载
@@ -97,14 +162,15 @@ const upload = multer({
     const uploadType = req.body.uploadType || 'upload';
     
     if (uploadType === 'template' || uploadType === 'template_output') {
-      // 模板文件支持Excel和JSON
+      // 模板文件支持Excel、JSON和PDF
       if (file.mimetype.includes('spreadsheet') || 
           file.mimetype.includes('excel') || 
           file.mimetype === 'application/json' ||
-          file.originalname.match(/\.(xlsx|xls|json)$/i)) {
+          file.mimetype === 'application/pdf' ||
+          file.originalname.match(/\.(xlsx|xls|json|pdf)$/i)) {
         cb(null, true);
       } else {
-        cb(new Error('模板文件只支持Excel(.xlsx, .xls)和JSON格式'), false);
+        cb(new Error('模板文件只支持Excel(.xlsx, .xls)、JSON和PDF格式'), false);
       }
     } else if (uploadType === 'template_input') {
       // 输入文件支持图片和PDF
@@ -146,6 +212,11 @@ app.post('/api/upload', upload.single('file'), async (req, res) => {
         const pdfData = await pdfParse(pdfBuffer);
         fileInfo.extractedText = pdfData.text;
         fileInfo.pageCount = pdfData.numpages;
+        
+        // 如果是输出模板PDF，额外提取结构信息
+        if (req.body.uploadType === 'template_output') {
+          fileInfo.templateStructure = analyzeTemplateStructure(pdfData.text);
+        }
       } catch (pdfError) {
         console.error('PDF解析错误:', pdfError);
         fileInfo.extractedText = '';
@@ -176,13 +247,13 @@ app.post('/api/upload', upload.single('file'), async (req, res) => {
 app.get('/api/templates', (req, res) => {
   try {
     const templates = fs.readdirSync(templatesDir)
-      .filter(file => file.match(/\.(xlsx|xls|json)$/i))
+      .filter(file => file.match(/\.(xlsx|xls|json|pdf)$/i) && !file.endsWith('_config.json'))
       .map(file => {
         const filePath = path.join(templatesDir, file);
         const stats = fs.statSync(filePath);
         return {
           filename: file,
-          originalname: file.replace(/^template_\d+_/, ''),
+          originalname: file.replace(/^template_(input_|output_)?\d+_/, ''),
           size: stats.size,
           uploadTime: stats.mtime
         };
