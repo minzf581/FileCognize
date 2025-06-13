@@ -7,6 +7,7 @@ const path = require('path');
 const fs = require('fs');
 const pdfParse = require('pdf-parse');
 const XLSX = require('xlsx');
+const ocrService = require('./ocr-service');
 require('dotenv').config();
 
 const app = express();
@@ -802,6 +803,151 @@ app.post('/api/templates', (req, res) => {
   } catch (error) {
     console.error('保存模板错误:', error);
     res.status(500).json({ error: '保存模板失败' });
+  }
+});
+
+// OCR识别API
+app.post('/api/ocr', upload.single('image'), async (req, res) => {
+  try {
+    if (!req.file) {
+      return res.status(400).json({ error: '没有上传图片文件' });
+    }
+
+    console.log('开始OCR识别:', req.file.originalname);
+    
+    // 检查文件类型
+    if (!req.file.mimetype.startsWith('image/')) {
+      return res.status(400).json({ error: '只支持图片文件' });
+    }
+
+    const { language = 'auto', multiLanguage = false } = req.body;
+    
+    let ocrResult;
+    
+    if (multiLanguage === 'true' || language === 'ita+eng+chi_sim') {
+      // 使用多语言识别（意大利语+英语+中文）
+      ocrResult = await ocrService.recognizeMultiLanguage(req.file.path);
+    } else {
+      // 使用默认识别（中文+英语）
+      ocrResult = await ocrService.recognizeImage(req.file.path);
+    }
+
+    // 清理临时文件
+    setTimeout(() => {
+      if (fs.existsSync(req.file.path)) {
+        fs.unlinkSync(req.file.path);
+      }
+    }, 5 * 60 * 1000); // 5分钟后删除
+
+    if (ocrResult.success) {
+      res.json({
+        success: true,
+        message: 'OCR识别完成',
+        text: ocrResult.text,
+        confidence: ocrResult.confidence,
+        language: ocrResult.language || 'chi_sim+eng',
+        filename: req.file.originalname
+      });
+    } else {
+      res.status(500).json({
+        success: false,
+        error: 'OCR识别失败: ' + ocrResult.error,
+        text: '',
+        confidence: 0
+      });
+    }
+
+  } catch (error) {
+    console.error('OCR API错误:', error);
+    res.status(500).json({ 
+      success: false,
+      error: 'OCR服务错误: ' + error.message 
+    });
+  }
+});
+
+// OCR识别并直接处理缺省模板API
+app.post('/api/ocr-and-process', upload.single('image'), async (req, res) => {
+  try {
+    if (!req.file) {
+      return res.status(400).json({ error: '没有上传图片文件' });
+    }
+
+    console.log('开始OCR识别并处理:', req.file.originalname);
+    
+    // 检查文件类型
+    if (!req.file.mimetype.startsWith('image/')) {
+      return res.status(400).json({ error: '只支持图片文件' });
+    }
+
+    const { sessionId } = req.body;
+    
+    // 使用多语言OCR识别
+    const ocrResult = await ocrService.recognizeMultiLanguage(req.file.path);
+    
+    if (!ocrResult.success) {
+      return res.status(500).json({
+        success: false,
+        error: 'OCR识别失败: ' + ocrResult.error
+      });
+    }
+
+    // 分析文本结构并提取数据
+    const structure = analyzeTemplateStructure(ocrResult.text);
+    const processedData = processDefaultTemplate(structure.extractedData);
+    
+    // 如果提供了sessionId，添加到会话中
+    if (sessionId) {
+      if (!global.documentSessions) {
+        global.documentSessions = {};
+      }
+      
+      if (!global.documentSessions[sessionId]) {
+        global.documentSessions[sessionId] = {
+          documents: [],
+          createdAt: new Date(),
+          lastUpdated: new Date()
+        };
+      }
+      
+      global.documentSessions[sessionId].documents.push({
+        extractedData: structure.extractedData,
+        processedData: processedData,
+        ocrResult: ocrResult,
+        filename: req.file.originalname,
+        addedAt: new Date()
+      });
+      
+      global.documentSessions[sessionId].lastUpdated = new Date();
+    }
+
+    // 清理临时文件
+    setTimeout(() => {
+      if (fs.existsSync(req.file.path)) {
+        fs.unlinkSync(req.file.path);
+      }
+    }, 5 * 60 * 1000);
+
+    res.json({
+      success: true,
+      message: 'OCR识别和数据处理完成',
+      ocrResult: {
+        text: ocrResult.text,
+        confidence: ocrResult.confidence,
+        language: ocrResult.language
+      },
+      extractedData: structure.extractedData,
+      processedData: processedData,
+      sessionId: sessionId,
+      filename: req.file.originalname
+    });
+
+  } catch (error) {
+    console.error('OCR处理API错误:', error);
+    res.status(500).json({ 
+      success: false,
+      error: 'OCR处理服务错误: ' + error.message 
+    });
   }
 });
 
