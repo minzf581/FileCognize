@@ -6,6 +6,7 @@ const multer = require('multer');
 const path = require('path');
 const fs = require('fs');
 const pdfParse = require('pdf-parse');
+const XLSX = require('xlsx');
 require('dotenv').config();
 
 const app = express();
@@ -114,11 +115,15 @@ const upload = multer({
         cb(new Error('输入文件只支持图片格式和PDF文件'), false);
       }
     } else {
-      // 普通文件支持图片和PDF
-      if (file.mimetype.startsWith('image/') || file.mimetype === 'application/pdf') {
+      // 普通文件支持图片、PDF和Excel文件
+      if (file.mimetype.startsWith('image/') || 
+          file.mimetype === 'application/pdf' ||
+          file.mimetype === 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' ||
+          file.mimetype === 'application/vnd.ms-excel' ||
+          file.originalname.match(/\.(xlsx|xls)$/i)) {
         cb(null, true);
       } else {
-        cb(new Error('只支持图片格式文件和PDF文件'), false);
+        cb(new Error('只支持图片格式文件、PDF文件和Excel文件(.xlsx, .xls)'), false);
       }
     }
   }
@@ -150,6 +155,31 @@ app.post('/api/upload', upload.single('file'), async (req, res) => {
         console.error('PDF解析错误:', pdfError);
         fileInfo.extractedText = '';
         fileInfo.pdfError = 'PDF解析失败，请尝试其他文件';
+      }
+    }
+
+    // 如果是Excel文件，尝试提取数据
+    if (req.file.mimetype === 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' ||
+        req.file.mimetype === 'application/vnd.ms-excel' ||
+        req.file.originalname.match(/\.(xlsx|xls)$/i)) {
+      try {
+        const workbook = XLSX.readFile(req.file.path);
+        const sheetNames = workbook.SheetNames;
+        const sheetsData = {};
+        
+        sheetNames.forEach(sheetName => {
+          const worksheet = workbook.Sheets[sheetName];
+          const jsonData = XLSX.utils.sheet_to_json(worksheet, { header: 1 });
+          sheetsData[sheetName] = jsonData;
+        });
+        
+        fileInfo.excelData = sheetsData;
+        fileInfo.sheetNames = sheetNames;
+        fileInfo.sheetCount = sheetNames.length;
+      } catch (excelError) {
+        console.error('Excel解析错误:', excelError);
+        fileInfo.excelData = {};
+        fileInfo.excelError = 'Excel解析失败，请尝试其他文件';
       }
     }
 
