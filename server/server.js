@@ -12,6 +12,37 @@ require('dotenv').config();
 const app = express();
 const PORT = process.env.PORT || 5000;
 
+// 缺省模板配置
+const DEFAULT_TEMPLATE = {
+  name: 'default_template',
+  description: '缺省运输单据模板',
+  outputFile: 'output.xlsx',
+  mapping: {
+    // 从输入图片中提取的字段映射到输出Excel的位置
+    'Numero Documento': { // 录单号
+      outputColumn: 'G', // IMPORTO列
+      outputRow: 11, // 第11行开始
+      description: '录单号写入IMPORTO列'
+    },
+    'Quantita': { // 长度
+      outputColumn: 'A', // QUANTITA列  
+      outputRow: 11,
+      description: '长度写入QUANTITA列'
+    },
+    'Descrizione Articolo': { // 加工内容
+      outputColumn: 'B', // DESCRIZIONE DEI BENI列
+      outputRow: 11,
+      description: '加工内容写入DESCRIZIONE DEI BENI列',
+      valueMapping: {
+        'NS .CERNIERE A SCORCIARE': 'NS .CERNIERE A SCORCIARE',
+        'CATENA CONTINUA METALLO MONT,BLOCCHETTO VARIE MIS': 'CATENA CONTINUA METALLO MONT,BLOCCHETTO VARIE MIS',
+        'CERNIERE A MONTARE CURSORE': 'CERNIERE A MONTARE CURSORE',
+        'CERNIERE A MONTARE TIRETTO': 'CERNIERE A MONTARE TIRETTO'
+      }
+    }
+  }
+};
+
 // 分析模板结构的辅助函数
 function analyzeTemplateStructure(text) {
   try {
@@ -20,51 +51,51 @@ function analyzeTemplateStructure(text) {
       headers: [],
       sections: [],
       tables: [],
-      suggestedMapping: {}
+      suggestedMapping: {},
+      extractedData: {}
     };
 
-    // 查找表格标题和结构
-    const tableHeaders = [];
-    const tableIndicators = ['产品', '商品', '名称', '数量', '单价', '金额', '总计', '小计'];
+    // 查找意大利语表格标题和结构
+    const tableIndicators = ['Numero Documento', 'Quantita', 'Descrizione Articolo', 'QUANTITA', 'DESCRIZIONE', 'IMPORTO'];
     
     lines.forEach((line, index) => {
       const trimmedLine = line.trim();
       
-      // 识别可能的表格标题
-      if (tableIndicators.some(indicator => trimmedLine.includes(indicator))) {
-        tableHeaders.push({
-          line: trimmedLine,
-          index: index,
-          position: index
-        });
+      // 识别可能的表格标题和数据
+      tableIndicators.forEach(indicator => {
+        if (trimmedLine.includes(indicator)) {
+          structure.headers.push({
+            line: trimmedLine,
+            index: index,
+            position: index,
+            type: indicator
+          });
+        }
+      });
+      
+      // 提取具体数据
+      // 查找Numero Documento（录单号）
+      const numeroMatch = trimmedLine.match(/Numero Documento[:\s]*([^\s]+)/i);
+      if (numeroMatch) {
+        structure.extractedData['Numero Documento'] = numeroMatch[1];
       }
       
-      // 识别章节标题
-      if (trimmedLine.length < 50 && (
-        trimmedLine.includes('信息') || 
-        trimmedLine.includes('明细') ||
-        trimmedLine.includes('汇总') ||
-        trimmedLine.match(/^\d+[.\s]/))) {
-        structure.sections.push({
-          title: trimmedLine,
-          position: index
-        });
+      // 查找Quantita（数量/长度）
+      const quantitaMatch = trimmedLine.match(/Quantita[:\s]*([^\s]+)/i);
+      if (quantitaMatch) {
+        structure.extractedData['Quantita'] = quantitaMatch[1];
+      }
+      
+      // 查找Descrizione Articolo（描述）
+      const descrizioneMatch = trimmedLine.match(/Descrizione Articolo[:\s]*(.+)/i);
+      if (descrizioneMatch) {
+        structure.extractedData['Descrizione Articolo'] = descrizioneMatch[1];
       }
     });
 
-    structure.headers = tableHeaders;
+    // 使用缺省模板的映射关系
+    structure.suggestedMapping = DEFAULT_TEMPLATE.mapping;
     
-    // 建议映射关系
-    if (tableHeaders.length > 0) {
-      structure.suggestedMapping = {
-        productNameColumn: 'A',
-        quantityColumn: 'B', 
-        unitPriceColumn: 'C',
-        totalPriceColumn: 'D',
-        startRow: tableHeaders[0].position + 2
-      };
-    }
-
     return structure;
   } catch (error) {
     console.error('分析模板结构错误:', error);
@@ -72,7 +103,49 @@ function analyzeTemplateStructure(text) {
       headers: [],
       sections: [],
       tables: [],
-      suggestedMapping: {}
+      suggestedMapping: {},
+      extractedData: {}
+    };
+  }
+}
+
+// 处理缺省模板数据的函数
+function processDefaultTemplate(extractedData) {
+  try {
+    const result = {
+      success: true,
+      data: [],
+      mapping: DEFAULT_TEMPLATE.mapping
+    };
+    
+    // 处理Descrizione Articolo的值映射
+    let descrizioneValue = extractedData['Descrizione Articolo'] || '';
+    if (descrizioneValue) {
+      // 检查是否匹配预定义的加工内容
+      const valueMapping = DEFAULT_TEMPLATE.mapping['Descrizione Articolo'].valueMapping;
+      for (const [key, value] of Object.entries(valueMapping)) {
+        if (descrizioneValue.includes(key) || descrizioneValue.toLowerCase().includes(key.toLowerCase())) {
+          descrizioneValue = value;
+          break;
+        }
+      }
+    }
+    
+    // 构建输出数据
+    const outputData = {
+      'Numero Documento': extractedData['Numero Documento'] || '',
+      'Quantita': extractedData['Quantita'] || '',
+      'Descrizione Articolo': descrizioneValue
+    };
+    
+    result.data.push(outputData);
+    return result;
+  } catch (error) {
+    console.error('处理缺省模板数据错误:', error);
+    return {
+      success: false,
+      error: error.message,
+      data: []
     };
   }
 }
@@ -289,6 +362,393 @@ app.post('/api/upload', upload.single('file'), async (req, res) => {
   }
 });
 
+// 获取缺省模板配置API
+app.get('/api/default-template', (req, res) => {
+  try {
+    res.json({
+      success: true,
+      template: DEFAULT_TEMPLATE,
+      outputFile: path.join(__dirname, '../output.xlsx')
+    });
+  } catch (error) {
+    console.error('获取缺省模板错误:', error);
+    res.status(500).json({ error: '获取缺省模板失败' });
+  }
+});
+
+// 处理缺省模板数据API - 支持单个文档处理
+app.post('/api/process-default-template', async (req, res) => {
+  try {
+    const { extractedText, imageData, sessionId } = req.body;
+    
+    if (!extractedText && !imageData) {
+      return res.status(400).json({ error: '需要提供提取的文本或图像数据' });
+    }
+    
+    // 分析文本结构并提取数据
+    const structure = analyzeTemplateStructure(extractedText || '');
+    const processedData = processDefaultTemplate(structure.extractedData);
+    
+    // 使用会话ID来管理连续输入，如果没有提供则创建新的
+    const currentSessionId = sessionId || `session_${Date.now()}`;
+    
+    res.json({
+      success: true,
+      message: '文档数据提取完成',
+      sessionId: currentSessionId,
+      extractedData: structure.extractedData,
+      processedData: processedData
+    });
+    
+  } catch (error) {
+    console.error('处理缺省模板错误:', error);
+    res.status(500).json({ error: '处理缺省模板失败: ' + error.message });
+  }
+});
+
+// 批量处理多个文档API
+app.post('/api/process-multiple-documents', async (req, res) => {
+  try {
+    const { documents, sessionId } = req.body;
+    
+    if (!documents || !Array.isArray(documents) || documents.length === 0) {
+      return res.status(400).json({ error: '需要提供文档数组' });
+    }
+    
+    console.log(`开始批量处理 ${documents.length} 个文档`);
+    
+    // 读取输出模板文件
+    const outputPath = path.join(__dirname, '../output.xlsx');
+    if (!fs.existsSync(outputPath)) {
+      return res.status(404).json({ error: '输出模板文件不存在' });
+    }
+    
+    // 使用xlsx库处理Excel文件
+    const workbook = XLSX.readFile(outputPath);
+    const worksheet = workbook.Sheets[workbook.SheetNames[0]];
+    
+    const processedResults = [];
+    let currentRow = 11; // 从第11行开始写入数据
+    
+    // 处理每个文档
+    for (let i = 0; i < documents.length; i++) {
+      const doc = documents[i];
+      console.log(`处理第 ${i + 1} 个文档`);
+      
+      try {
+        // 分析文本结构并提取数据
+        const structure = analyzeTemplateStructure(doc.extractedText || '');
+        const processedData = processDefaultTemplate(structure.extractedData);
+        
+        if (processedData.success && processedData.data.length > 0) {
+          const data = processedData.data[0];
+          
+          // 写入Numero Documento到IMPORTO列
+          if (data['Numero Documento']) {
+            const importoCell = `G${currentRow}`;
+            worksheet[importoCell] = { v: data['Numero Documento'], t: 's' };
+          }
+          
+          // 写入Quantita到QUANTITA列
+          if (data['Quantita']) {
+            const quantitaCell = `A${currentRow}`;
+            worksheet[quantitaCell] = { v: data['Quantita'], t: 's' };
+          }
+          
+          // 写入Descrizione Articolo到DESCRIZIONE DEI BENI列
+          if (data['Descrizione Articolo']) {
+            const descrizioneCell = `B${currentRow}`;
+            worksheet[descrizioneCell] = { v: data['Descrizione Articolo'], t: 's' };
+          }
+          
+          processedResults.push({
+            documentIndex: i + 1,
+            row: currentRow,
+            extractedData: structure.extractedData,
+            processedData: data,
+            success: true
+          });
+          
+          currentRow++; // 移动到下一行
+        } else {
+          processedResults.push({
+            documentIndex: i + 1,
+            row: currentRow,
+            error: '数据提取失败',
+            success: false
+          });
+        }
+      } catch (docError) {
+        console.error(`处理第 ${i + 1} 个文档时出错:`, docError);
+        processedResults.push({
+          documentIndex: i + 1,
+          row: currentRow,
+          error: docError.message,
+          success: false
+        });
+      }
+    }
+    
+    // 生成新的Excel文件
+    const timestamp = Date.now();
+    const outputFilename = `batch_processed_${timestamp}.xlsx`;
+    const outputFilePath = path.join(uploadsDir, outputFilename);
+    
+    XLSX.writeFile(workbook, outputFilePath);
+    
+    const successCount = processedResults.filter(r => r.success).length;
+    const failCount = processedResults.length - successCount;
+    
+    res.json({
+      success: true,
+      message: `批量处理完成: ${successCount} 个成功, ${failCount} 个失败`,
+      sessionId: sessionId || `batch_${timestamp}`,
+      totalDocuments: documents.length,
+      successCount: successCount,
+      failCount: failCount,
+      results: processedResults,
+      outputFile: outputFilename,
+      downloadUrl: `/api/download/${outputFilename}`
+    });
+    
+  } catch (error) {
+    console.error('批量处理错误:', error);
+    res.status(500).json({ error: '批量处理失败: ' + error.message });
+  }
+});
+
+// 添加文档到会话API
+app.post('/api/add-document-to-session', async (req, res) => {
+  try {
+    const { extractedText, imageData, sessionId } = req.body;
+    
+    if (!extractedText && !imageData) {
+      return res.status(400).json({ error: '需要提供提取的文本或图像数据' });
+    }
+    
+    if (!sessionId) {
+      return res.status(400).json({ error: '需要提供会话ID' });
+    }
+    
+    // 分析文本结构并提取数据
+    const structure = analyzeTemplateStructure(extractedText || '');
+    const processedData = processDefaultTemplate(structure.extractedData);
+    
+    // 将数据存储到会话中（这里使用内存存储，生产环境建议使用数据库）
+    if (!global.documentSessions) {
+      global.documentSessions = {};
+    }
+    
+    if (!global.documentSessions[sessionId]) {
+      global.documentSessions[sessionId] = {
+        documents: [],
+        createdAt: new Date(),
+        lastUpdated: new Date()
+      };
+    }
+    
+    global.documentSessions[sessionId].documents.push({
+      extractedData: structure.extractedData,
+      processedData: processedData,
+      addedAt: new Date()
+    });
+    
+    global.documentSessions[sessionId].lastUpdated = new Date();
+    
+    const documentCount = global.documentSessions[sessionId].documents.length;
+    
+    res.json({
+      success: true,
+      message: `文档已添加到会话，当前共有 ${documentCount} 个文档`,
+      sessionId: sessionId,
+      documentCount: documentCount,
+      extractedData: structure.extractedData,
+      processedData: processedData
+    });
+    
+  } catch (error) {
+    console.error('添加文档到会话错误:', error);
+    res.status(500).json({ error: '添加文档失败: ' + error.message });
+  }
+});
+
+// 生成会话Excel文件API
+app.post('/api/generate-session-excel', async (req, res) => {
+  try {
+    const { sessionId } = req.body;
+    
+    if (!sessionId) {
+      return res.status(400).json({ error: '需要提供会话ID' });
+    }
+    
+    if (!global.documentSessions || !global.documentSessions[sessionId]) {
+      return res.status(404).json({ error: '会话不存在' });
+    }
+    
+    const session = global.documentSessions[sessionId];
+    const documents = session.documents;
+    
+    if (documents.length === 0) {
+      return res.status(400).json({ error: '会话中没有文档' });
+    }
+    
+    console.log(`为会话 ${sessionId} 生成Excel文件，包含 ${documents.length} 个文档`);
+    
+    // 读取输出模板文件
+    const outputPath = path.join(__dirname, '../output.xlsx');
+    if (!fs.existsSync(outputPath)) {
+      return res.status(404).json({ error: '输出模板文件不存在' });
+    }
+    
+    // 使用xlsx库处理Excel文件
+    const workbook = XLSX.readFile(outputPath);
+    const worksheet = workbook.Sheets[workbook.SheetNames[0]];
+    
+    let currentRow = 11; // 从第11行开始写入数据
+    const processedResults = [];
+    
+    // 处理每个文档
+    documents.forEach((doc, index) => {
+      if (doc.processedData.success && doc.processedData.data.length > 0) {
+        const data = doc.processedData.data[0];
+        
+        // 写入Numero Documento到IMPORTO列
+        if (data['Numero Documento']) {
+          const importoCell = `G${currentRow}`;
+          worksheet[importoCell] = { v: data['Numero Documento'], t: 's' };
+        }
+        
+        // 写入Quantita到QUANTITA列
+        if (data['Quantita']) {
+          const quantitaCell = `A${currentRow}`;
+          worksheet[quantitaCell] = { v: data['Quantita'], t: 's' };
+        }
+        
+        // 写入Descrizione Articolo到DESCRIZIONE DEI BENI列
+        if (data['Descrizione Articolo']) {
+          const descrizioneCell = `B${currentRow}`;
+          worksheet[descrizioneCell] = { v: data['Descrizione Articolo'], t: 's' };
+        }
+        
+        processedResults.push({
+          documentIndex: index + 1,
+          row: currentRow,
+          data: data,
+          success: true
+        });
+        
+        currentRow++; // 移动到下一行
+      }
+    });
+    
+    // 生成新的Excel文件
+    const timestamp = Date.now();
+    const outputFilename = `session_${sessionId}_${timestamp}.xlsx`;
+    const outputFilePath = path.join(uploadsDir, outputFilename);
+    
+    XLSX.writeFile(workbook, outputFilePath);
+    
+    // 清理会话数据（可选）
+    // delete global.documentSessions[sessionId];
+    
+    res.json({
+      success: true,
+      message: `会话Excel文件生成完成，包含 ${processedResults.length} 个文档`,
+      sessionId: sessionId,
+      documentCount: documents.length,
+      processedCount: processedResults.length,
+      results: processedResults,
+      outputFile: outputFilename,
+      downloadUrl: `/api/download/${outputFilename}`
+    });
+    
+  } catch (error) {
+    console.error('生成会话Excel错误:', error);
+    res.status(500).json({ error: '生成Excel失败: ' + error.message });
+  }
+});
+
+// 获取会话信息API
+app.get('/api/session/:sessionId', (req, res) => {
+  try {
+    const sessionId = req.params.sessionId;
+    
+    if (!global.documentSessions || !global.documentSessions[sessionId]) {
+      return res.status(404).json({ error: '会话不存在' });
+    }
+    
+    const session = global.documentSessions[sessionId];
+    
+    res.json({
+      success: true,
+      sessionId: sessionId,
+      documentCount: session.documents.length,
+      createdAt: session.createdAt,
+      lastUpdated: session.lastUpdated,
+      documents: session.documents.map((doc, index) => ({
+        index: index + 1,
+        extractedData: doc.extractedData,
+        addedAt: doc.addedAt,
+        hasData: doc.processedData && doc.processedData.success
+      }))
+    });
+    
+  } catch (error) {
+    console.error('获取会话信息错误:', error);
+    res.status(500).json({ error: '获取会话信息失败' });
+  }
+});
+
+// 获取所有会话列表API
+app.get('/api/sessions', (req, res) => {
+  try {
+    if (!global.documentSessions) {
+      return res.json({ sessions: [] });
+    }
+    
+    const sessions = Object.keys(global.documentSessions).map(sessionId => {
+      const session = global.documentSessions[sessionId];
+      return {
+        sessionId: sessionId,
+        documentCount: session.documents.length,
+        createdAt: session.createdAt,
+        lastUpdated: session.lastUpdated
+      };
+    });
+    
+    // 按最后更新时间排序
+    sessions.sort((a, b) => new Date(b.lastUpdated) - new Date(a.lastUpdated));
+    
+    res.json({ sessions });
+    
+  } catch (error) {
+    console.error('获取会话列表错误:', error);
+    res.status(500).json({ error: '获取会话列表失败' });
+  }
+});
+
+// 删除会话API
+app.delete('/api/session/:sessionId', (req, res) => {
+  try {
+    const sessionId = req.params.sessionId;
+    
+    if (!global.documentSessions || !global.documentSessions[sessionId]) {
+      return res.status(404).json({ error: '会话不存在' });
+    }
+    
+    delete global.documentSessions[sessionId];
+    
+    res.json({
+      success: true,
+      message: '会话删除成功'
+    });
+    
+  } catch (error) {
+    console.error('删除会话错误:', error);
+    res.status(500).json({ error: '删除会话失败' });
+  }
+});
+
 // 模板管理API
 app.get('/api/templates', (req, res) => {
   try {
@@ -304,6 +764,15 @@ app.get('/api/templates', (req, res) => {
           uploadTime: stats.mtime
         };
       });
+    
+    // 添加缺省模板到列表
+    templates.unshift({
+      filename: 'default_template',
+      originalname: '缺省运输单据模板',
+      size: 0,
+      uploadTime: new Date(),
+      isDefault: true
+    });
     
     res.json({ templates });
   } catch (error) {
@@ -336,10 +805,39 @@ app.post('/api/templates', (req, res) => {
   }
 });
 
+// 文件下载API
+app.get('/api/download/:filename', (req, res) => {
+  try {
+    const filename = req.params.filename;
+    const filePath = path.join(uploadsDir, filename);
+    
+    if (!fs.existsSync(filePath)) {
+      return res.status(404).json({ error: '文件不存在' });
+    }
+    
+    // 设置下载头
+    res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+    res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+    
+    // 发送文件
+    res.sendFile(filePath);
+    
+  } catch (error) {
+    console.error('文件下载错误:', error);
+    res.status(500).json({ error: '文件下载失败' });
+  }
+});
+
 // 删除模板API
 app.delete('/api/templates/:filename', (req, res) => {
   try {
     const filename = req.params.filename;
+    
+    // 不允许删除缺省模板
+    if (filename === 'default_template') {
+      return res.status(400).json({ error: '不能删除缺省模板' });
+    }
+    
     const filePath = path.join(templatesDir, filename);
     const configPath = path.join(templatesDir, `${filename}_config.json`);
     
