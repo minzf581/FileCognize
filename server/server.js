@@ -44,10 +44,11 @@ const DEFAULT_TEMPLATE = {
   }
 };
 
-// 分析模板结构的辅助函数
+// 分析模板结构的辅助函数 - 精确提取指定字段
 function analyzeTemplateStructure(text) {
   try {
-    const lines = text.split('\n').filter(line => line.trim().length > 0);
+    console.log('开始精确提取数据...');
+    
     const structure = {
       headers: [],
       sections: [],
@@ -59,43 +60,95 @@ function analyzeTemplateStructure(text) {
     // 查找意大利语表格标题和结构
     const tableIndicators = ['Numero Documento', 'Quantita', 'Descrizione Articolo', 'QUANTITA', 'DESCRIZIONE', 'IMPORTO'];
     
-    lines.forEach((line, index) => {
-      const trimmedLine = line.trim();
-      
-      // 识别可能的表格标题和数据
-      tableIndicators.forEach(indicator => {
-        if (trimmedLine.includes(indicator)) {
-          structure.headers.push({
-            line: trimmedLine,
-            index: index,
-            position: index,
-            type: indicator
-          });
-        }
-      });
-      
-      // 提取具体数据
-      // 查找Numero Documento（录单号）
-      const numeroMatch = trimmedLine.match(/Numero Documento[:\s]*([^\s]+)/i);
-      if (numeroMatch) {
-        structure.extractedData['Numero Documento'] = numeroMatch[1];
+    // 1. 提取Numero Documento (录单号) - 写入IMPORTO列
+    console.log('提取Numero Documento...');
+    const numeroPatterns = [
+      /\[01107\s*\|\s*([^|\s]+\/[^|\s]+)\s*\|/i,   // 匹配 [01107 | 549/s | 格式
+      /\|\s*([0-9]+\/[a-zA-Z]+)\s*\|\s*[0-9]/i,   // 匹配 | 549/s | 日期 格式
+      /\|\s*\d+\s*\|\s*([^|\s]+\/[^|\s]+)\s*\|/i, // 匹配表格中的 | 数字 | 549/s | 格式
+      /([0-9]+\/[a-zA-Z]+)\s+[0-9]{2}\/[0-9]{2}\/[0-9]{4}/i, // 549/s 10/03/2025 格式
+      /Numero\s+Documento[:\s]*([^\s\n|]+)/i       // 标准格式
+    ];
+    
+    for (const pattern of numeroPatterns) {
+      const match = text.match(pattern);
+      if (match && match[1] && match[1] !== 'Data' && match[1].includes('/')) {
+        structure.extractedData['Numero Documento'] = match[1].trim();
+        console.log('✅ 找到Numero Documento:', match[1].trim());
+        break;
       }
-      
-      // 查找Quantita（数量/长度）
-      const quantitaMatch = trimmedLine.match(/Quantita[:\s]*([^\s]+)/i);
-      if (quantitaMatch) {
-        structure.extractedData['Quantita'] = quantitaMatch[1];
+    }
+
+    // 2. 提取Quantità (长度) - 写入QUANTITA列
+    console.log('提取Quantita...');
+    const quantitaPatterns = [
+      /MT\s*\|\s*([0-9]+[,.]?[0-9]*)\s*\|/i,        // MT | 105,00 | 格式
+      /\|\s*([0-9]+[,.]?[0-9]*)\s*\|\s*$/m,         // 行末的数字
+      /quantità[:\s]*\|\s*([^|\n]+)\s*\|/i,         // quantità列
+      /VARIE\s+MISURE[^|]*\|\s*([0-9]+[,.]?[0-9]*)\s*\|/i  // VARIE MISURE后的数字
+    ];
+    
+    for (const pattern of quantitaPatterns) {
+      const match = text.match(pattern);
+      if (match && match[1] && parseFloat(match[1].replace(',', '.')) > 1) {
+        structure.extractedData['Quantita'] = match[1].trim();
+        console.log('✅ 找到Quantita:', match[1].trim());
+        break;
       }
-      
-      // 查找Descrizione Articolo（描述）
-      const descrizioneMatch = trimmedLine.match(/Descrizione Articolo[:\s]*(.+)/i);
-      if (descrizioneMatch) {
-        structure.extractedData['Descrizione Articolo'] = descrizioneMatch[1];
+    }
+
+    // 3. 提取Descrizione Articolo (加工内容) - 写入DESCRIZIONE DEI BENI列
+    console.log('提取Descrizione Articolo...');
+    
+    // 四种可能的加工内容
+    const targetDescriptions = [
+      'NS .CERNIERE A SCORCIARE',
+      'CATENA CONTINUA METALLO MONT,BLOCCHETTO VARIE MIS', 
+      'CERNIERE A MONTARE CURSORE',
+      'CERNIERE A MONTARE TIRETTO'
+    ];
+
+    let foundDescription = null;
+    
+    // 首先尝试精确匹配预定义的描述
+    for (const target of targetDescriptions) {
+      const regex = new RegExp(target.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'i');
+      if (regex.test(text)) {
+        foundDescription = target;
+        console.log('✅ 精确匹配到:', target);
+        break;
       }
-    });
+    }
+
+    // 如果没有精确匹配，尝试模糊匹配关键词
+    if (!foundDescription) {
+      console.log('尝试模糊匹配...');
+      
+      if (/CATENA.*CONTINUA.*METALLO/i.test(text)) {
+        foundDescription = 'CATENA CONTINUA METALLO MONT,BLOCCHETTO VARIE MIS';
+        console.log('✅ 模糊匹配到: CATENA CONTINUA METALLO');
+      } else if (/NS.*CERNIERE.*SCORCIARE/i.test(text)) {
+        foundDescription = 'NS .CERNIERE A SCORCIARE';
+        console.log('✅ 模糊匹配到: NS CERNIERE A SCORCIARE');
+      } else if (/CERNIERE.*CURSORE/i.test(text)) {
+        foundDescription = 'CERNIERE A MONTARE CURSORE';
+        console.log('✅ 模糊匹配到: CERNIERE CURSORE');
+      } else if (/CERNIERE.*TIRETTO/i.test(text)) {
+        foundDescription = 'CERNIERE A MONTARE TIRETTO';
+        console.log('✅ 模糊匹配到: CERNIERE TIRETTO');
+      }
+    }
+
+    if (foundDescription) {
+      structure.extractedData['Descrizione Articolo'] = foundDescription;
+    } else {
+      console.log('❌ 未找到匹配的Descrizione Articolo');
+    }
 
     // 使用缺省模板的映射关系
     structure.suggestedMapping = DEFAULT_TEMPLATE.mapping;
+    
+    console.log('📊 最终提取的数据:', structure.extractedData);
     
     return structure;
   } catch (error) {

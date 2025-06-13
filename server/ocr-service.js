@@ -87,15 +87,30 @@ class OCRService {
       // 模拟多语言OCR识别过程
       await new Promise(resolve => setTimeout(resolve, 3000));
       
-      // 返回模拟的多语言OCR结果
-      const mockText = `
-      DOCUMENTO DI TRANSPORTO
-      运输单据
-      Numero Documento: 98765
-      Quantita: 200cm
-      Descrizione Articolo: CATENA CONTINUA METALLO MONT,BLOCCHETTO VARIE MIS
-      其他多语言识别的文本内容...
-      `;
+      // 使用真实的OCR结果格式
+      const mockText = `£ Py
+. » . .
+Meoni & Ciampalini s.p.a.
+. : Spett.
+RAPPRESENTANZE CON DEPOSITO E COMMERCIO CONFEZIONE APOLLO DI CHEN DONGPING
+ACCESSORI PER CONFEZIONE VIA DEL CASTELLUCCIO, 38
+一 PO FI
+50053 EMPOLI (Firenze) - Via Reali, 32/34 Ae Be ire
+Zona Industriale Terrafino
+| edd Ud + Fax 0571.930161
+e-mail: info@meoniciampalini.it - www. ici ini.i i inazi i i
+| Capitale Sociale Euro 200.006 60 meoniciampalini.it Luogo di Destinazione dei Beni
+R.E.A. Firenze 296618
+| Codice Fiscale e Partita Iva 03066330485 ay
+| Reg. Impr. Firenze 03066330485
+| Id. Code: IT 03066330485
+1
+| [i Cliente] Numero Documento Data Documento "Cod. Fisc./Partita Iva ca
+[01107 | 549/s 10/03/2025 07188150481 Documento di Trasporto (0.d.t.) || 1 |
+LCodice Articolo || Descrizione Articolo i Jun) quantità |
+i | Fr STE ET A TE RE ET os RTI | —
+| METALLOFIS CATENA CONTINUA METALLO DA FARE FISSA VARIE MISURE PZ 246 MT | 105,00 |
+05685`;
 
       console.log('多语言OCR识别完成 (模拟结果)');
       
