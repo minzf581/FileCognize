@@ -3,224 +3,315 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>FileCognize - 文档识别系统</title>
+    <title>FileCognize - 智能文档识别系统</title>
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
     <style>
         * {
             margin: 0;
             padding: 0;
             box-sizing: border-box;
         }
-        
+
         body {
-            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', sans-serif;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
             background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
             min-height: 100vh;
             padding: 20px;
         }
-        
+
         .container {
-            max-width: 800px;
+            max-width: 1200px;
             margin: 0 auto;
             background: white;
             border-radius: 15px;
             box-shadow: 0 20px 40px rgba(0,0,0,0.1);
             overflow: hidden;
         }
-        
+
         .header {
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            background: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%);
             color: white;
             padding: 30px;
             text-align: center;
         }
-        
+
         .header h1 {
             font-size: 2.5em;
             margin-bottom: 10px;
+            text-shadow: 0 2px 4px rgba(0,0,0,0.3);
         }
-        
-        .header p {
-            opacity: 0.9;
-            font-size: 1.1em;
-        }
-        
+
         .content {
-            padding: 40px;
+            padding: 30px;
         }
-        
+
         .upload-section {
-            text-align: center;
             margin-bottom: 30px;
         }
-        
+
         .upload-area {
             border: 3px dashed #ddd;
             border-radius: 10px;
             padding: 40px;
-            margin: 20px 0;
+            text-align: center;
             transition: all 0.3s ease;
-            cursor: pointer;
+            background: #fafafa;
         }
-        
-        .upload-area:hover {
-            border-color: #667eea;
-            background: #f8f9ff;
-        }
-        
+
         .upload-area.dragover {
-            border-color: #667eea;
-            background: #f0f4ff;
+            border-color: #4facfe;
+            background: #f0f8ff;
         }
-        
-        .upload-btn {
+
+        .upload-buttons {
+            display: flex;
+            justify-content: center;
+            gap: 15px;
+            margin: 20px 0;
+            flex-wrap: wrap;
+        }
+
+        .btn {
+            padding: 12px 24px;
+            border: none;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 16px;
+            font-weight: 600;
+            transition: all 0.3s ease;
+            text-decoration: none;
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .btn-primary {
+            background: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%);
+            color: white;
+        }
+
+        .btn-success {
+            background: linear-gradient(135deg, #43e97b 0%, #38f9d7 100%);
+            color: white;
+        }
+
+        .btn-info {
             background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
             color: white;
-            border: none;
-            padding: 15px 30px;
-            border-radius: 25px;
-            font-size: 16px;
-            cursor: pointer;
-            transition: transform 0.2s;
         }
-        
-        .upload-btn:hover {
+
+        .btn-warning {
+            background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);
+            color: white;
+        }
+
+        .btn-danger {
+            background: linear-gradient(135deg, #ff6b6b 0%, #ee5a24 100%);
+            color: white;
+        }
+
+        .btn-secondary {
+            background: #6c757d;
+            color: white;
+        }
+
+        .btn-outline-primary {
+            background: transparent;
+            color: #4facfe;
+            border: 2px solid #4facfe;
+        }
+
+        .btn-outline-secondary {
+            background: transparent;
+            color: #6c757d;
+            border: 2px solid #6c757d;
+        }
+
+        .btn-sm {
+            padding: 8px 16px;
+            font-size: 14px;
+        }
+
+        .btn:hover {
             transform: translateY(-2px);
+            box-shadow: 0 8px 25px rgba(0,0,0,0.15);
         }
-        
-        .session-input {
-            margin: 20px 0;
+
+        .btn:disabled {
+            background: #ccc !important;
+            cursor: not-allowed;
+            transform: none;
         }
-        
-        .session-input input {
-            width: 100%;
-            padding: 12px;
-            border: 2px solid #ddd;
-            border-radius: 8px;
-            font-size: 16px;
-        }
-        
-        .session-input input:focus {
-            outline: none;
-            border-color: #667eea;
-        }
-        
+
         .progress {
-            display: none;
-            margin: 20px 0;
+            width: 100%;
+            height: 20px;
             background: #f0f0f0;
             border-radius: 10px;
             overflow: hidden;
+            margin: 20px 0;
+            display: none;
         }
-        
+
         .progress-bar {
-            height: 40px;
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            width: 0%;
-            transition: width 0.3s;
+            height: 100%;
+            background: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%);
+            border-radius: 10px;
+            transition: width 0.3s ease;
             display: flex;
             align-items: center;
             justify-content: center;
             color: white;
             font-weight: bold;
         }
-        
-        .result {
-            display: none;
-            margin-top: 30px;
-            padding: 25px;
+
+        .results-container {
+            background: #f8f9fa;
             border-radius: 10px;
-            border-left: 5px solid #667eea;
-            background: #f8f9ff;
-        }
-        
-        .result.error {
-            border-left-color: #e74c3c;
-            background: #fdf2f2;
-            color: #e74c3c;
-        }
-        
-        .extracted-fields {
-            display: grid;
-            gap: 15px;
+            padding: 25px;
             margin: 20px 0;
+            border: 1px solid #e9ecef;
         }
-        
-        .field-item {
-            background: white;
-            padding: 15px;
-            border-radius: 8px;
-            border: 1px solid #e0e0e0;
+
+        .form-group {
+            margin-bottom: 20px;
         }
-        
-        .field-label {
-            font-weight: bold;
-            color: #667eea;
-            margin-bottom: 5px;
-        }
-        
-        .field-value {
-            font-size: 1.1em;
+
+        .form-group label {
+            display: block;
+            margin-bottom: 8px;
+            font-weight: 600;
             color: #333;
         }
-        
-        .field-mapping {
-            font-size: 0.9em;
-            color: #666;
-            font-style: italic;
-        }
-        
-        .actions {
-            margin-top: 30px;
-            text-align: center;
-        }
-        
-        .export-btn, .camera-btn, .print-btn, .capture-btn, .close-camera-btn {
-            background: #28a745;
-            color: white;
-            border: none;
-            padding: 12px 25px;
-            border-radius: 20px;
+
+        .form-control {
+            width: 100%;
+            padding: 12px;
+            border: 2px solid #ddd;
+            border-radius: 8px;
             font-size: 16px;
-            cursor: pointer;
-            margin: 0 10px;
-            transition: all 0.2s;
+            transition: border-color 0.3s ease;
         }
-        
-        .camera-btn {
-            background: #4CAF50;
+
+        .form-control:focus {
+            outline: none;
+            border-color: #4facfe;
+            box-shadow: 0 0 0 3px rgba(79, 172, 254, 0.1);
         }
-        
-        .print-btn {
-            background: #FF9800;
-        }
-        
-        .capture-btn {
-            background: #2196F3;
-        }
-        
-        .close-camera-btn {
-            background: #f44336;
-        }
-        
-        .export-btn:hover, .camera-btn:hover, .print-btn:hover, .capture-btn:hover, .close-camera-btn:hover {
-            transform: translateY(-1px);
-            opacity: 0.9;
-        }
-        
-        .export-btn:disabled, .print-btn:disabled {
-            background: #ccc;
-            cursor: not-allowed;
-            transform: none;
-        }
-        
-        .upload-buttons {
+
+        .form-actions {
             display: flex;
-            justify-content: center;
             gap: 10px;
+            justify-content: flex-end;
+            margin-top: 20px;
+        }
+
+        .action-buttons {
+            display: flex;
+            gap: 15px;
+            justify-content: center;
+            margin-top: 20px;
             flex-wrap: wrap;
+        }
+
+        .display-data {
+            background: white;
+            padding: 20px;
+            border-radius: 8px;
+            border: 1px solid #e9ecef;
+        }
+
+        .field-item {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 15px;
+            margin: 10px 0;
+            background: #f8f9fa;
+            border-radius: 8px;
+            border-left: 4px solid #4facfe;
+        }
+
+        .field-label {
+            font-weight: 600;
+            color: #333;
+            min-width: 150px;
+        }
+
+        .field-value {
+            flex: 1;
+            margin: 0 15px;
+            padding: 8px 12px;
+            background: white;
+            border-radius: 4px;
+            border: 1px solid #ddd;
+        }
+
+        .history-section {
+            background: #f8f9fa;
+            border-radius: 10px;
+            padding: 25px;
+            margin: 20px 0;
+            border: 1px solid #e9ecef;
+        }
+
+        .history-controls {
+            display: flex;
+            gap: 15px;
+            align-items: center;
+            margin-bottom: 20px;
+            flex-wrap: wrap;
+        }
+
+        .selected-count {
+            margin-left: auto;
+            font-weight: 600;
+            color: #666;
+        }
+
+        .table-responsive {
+            overflow-x: auto;
             margin: 20px 0;
         }
-        
+
+        .table {
+            width: 100%;
+            border-collapse: collapse;
+            background: white;
+            border-radius: 8px;
+            overflow: hidden;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+
+        .table th,
+        .table td {
+            padding: 12px;
+            text-align: left;
+            border-bottom: 1px solid #e9ecef;
+        }
+
+        .table th {
+            background: #f8f9fa;
+            font-weight: 600;
+            color: #333;
+        }
+
+        .table-striped tbody tr:nth-child(even) {
+            background: #f8f9fa;
+        }
+
+        .table-hover tbody tr:hover {
+            background: #e3f2fd;
+        }
+
+        .batch-actions {
+            display: flex;
+            gap: 15px;
+            justify-content: center;
+            margin-top: 20px;
+            flex-wrap: wrap;
+        }
+
         .camera-section {
             margin-top: 20px;
             text-align: center;
@@ -229,7 +320,7 @@
             border-radius: 10px;
             box-shadow: 0 4px 15px rgba(0,0,0,0.1);
         }
-        
+
         .camera-section video {
             width: 100%;
             max-width: 500px;
@@ -238,33 +329,44 @@
             box-shadow: 0 4px 15px rgba(0,0,0,0.2);
             background: #f0f0f0;
         }
-        
+
         .camera-controls {
             margin-top: 20px;
             display: flex;
             justify-content: center;
             gap: 15px;
         }
-        
-        .camera-status {
-            margin-bottom: 15px;
-            color: #666;
-            font-style: italic;
-        }
-        
-        .session-info {
-            background: #e3f2fd;
+
+        .alert {
             padding: 15px;
-            border-radius: 8px;
             margin: 20px 0;
-            text-align: center;
+            border-radius: 8px;
+            border: 1px solid transparent;
         }
-        
+
+        .alert-success {
+            color: #155724;
+            background-color: #d4edda;
+            border-color: #c3e6cb;
+        }
+
+        .alert-danger {
+            color: #721c24;
+            background-color: #f8d7da;
+            border-color: #f5c6cb;
+        }
+
+        .alert-warning {
+            color: #856404;
+            background-color: #fff3cd;
+            border-color: #ffeaa7;
+        }
+
         .hidden {
             display: none !important;
         }
-        
-        @media (max-width: 600px) {
+
+        @media (max-width: 768px) {
             .container {
                 margin: 10px;
                 border-radius: 10px;
@@ -281,28 +383,53 @@
             .content {
                 padding: 20px;
             }
+
+            .field-item {
+                flex-direction: column;
+                align-items: stretch;
+            }
+
+            .field-label {
+                min-width: auto;
+                margin-bottom: 8px;
+            }
+
+            .field-value {
+                margin: 0;
+            }
+
+            .history-controls {
+                flex-direction: column;
+                align-items: stretch;
+            }
+
+            .selected-count {
+                margin-left: 0;
+                text-align: center;
+            }
         }
     </style>
 </head>
 <body>
     <div class="container">
         <div class="header">
-            <h1>🔍 FileCognize</h1>
+            <h1><i class="fas fa-search"></i> FileCognize</h1>
             <p>智能文档识别与数据提取系统</p>
         </div>
         
         <div class="content">
+            <!-- 上传区域 -->
             <div class="upload-section">
                 <div class="upload-area" id="uploadArea">
-                    <h3>📁 上传文档</h3>
+                    <h3><i class="fas fa-cloud-upload-alt"></i> 上传文档</h3>
                     <p>支持图片和PDF文件，点击选择文件或拖拽到此处</p>
                     
                     <div class="upload-buttons">
-                        <button class="upload-btn" onclick="document.getElementById('fileInput').click()">
-                            📁 选择文件
+                        <button class="btn btn-primary" onclick="document.getElementById('fileInput').click()">
+                            <i class="fas fa-folder-open"></i> 选择文件
                         </button>
-                        <button class="camera-btn" onclick="openCamera()">
-                            📷 拍照识别
+                        <button class="btn btn-info" onclick="openCamera()">
+                            <i class="fas fa-camera"></i> 拍照识别
                         </button>
                     </div>
                     
@@ -310,11 +437,15 @@
                     
                     <!-- 相机界面 -->
                     <div class="camera-section" id="cameraSection" style="display: none;">
-                        <div class="camera-status" id="cameraStatus">正在启动相机...</div>
+                        <div id="cameraStatus">正在启动相机...</div>
                         <video id="cameraVideo" autoplay playsinline muted></video>
                         <div class="camera-controls">
-                            <button class="capture-btn" onclick="capturePhoto()">📸 拍照</button>
-                            <button class="close-camera-btn" onclick="closeCamera()">❌ 关闭相机</button>
+                            <button class="btn btn-success" onclick="capturePhoto()">
+                                <i class="fas fa-camera"></i> 拍照
+                            </button>
+                            <button class="btn btn-danger" onclick="closeCamera()">
+                                <i class="fas fa-times"></i> 关闭相机
+                            </button>
                         </div>
                         <canvas id="captureCanvas" style="display: none;"></canvas>
                     </div>
@@ -324,70 +455,160 @@
                     <div class="progress-bar" id="progressBar">0%</div>
                 </div>
             </div>
-            
-            <div class="result" id="result">
-                <h3>📊 识别结果</h3>
-                <div id="resultContent"></div>
+
+            <!-- 识别结果区域 -->
+            <div id="results" class="results-container" style="display: none;">
+                <h3><i class="fas fa-eye"></i> 识别结果</h3>
                 
-                <div class="actions">
-                    <button class="export-btn" id="exportBtn" onclick="exportData()" disabled>
-                        📥 导出Excel文件
+                <!-- 可编辑的识别结果表单 -->
+                <div class="edit-form" id="editForm" style="display: none;">
+                    <div class="form-group">
+                        <label for="editNumeroDocumento">Numero Documento:</label>
+                        <input type="text" id="editNumeroDocumento" class="form-control">
+                    </div>
+                    <div class="form-group">
+                        <label for="editQuantita">Quantita:</label>
+                        <input type="text" id="editQuantita" class="form-control">
+                    </div>
+                    <div class="form-group">
+                        <label for="editDescrizioneArticolo">Descrizione Articolo:</label>
+                        <input type="text" id="editDescrizioneArticolo" class="form-control">
+                    </div>
+                    <div class="form-actions">
+                        <button id="saveBtn" class="btn btn-success" onclick="saveEditedData()">
+                            <i class="fas fa-save"></i> 保存
+                        </button>
+                        <button id="cancelBtn" class="btn btn-secondary" onclick="cancelEdit()">
+                            <i class="fas fa-times"></i> 取消
+                        </button>
+                    </div>
+                </div>
+                
+                <!-- 显示识别结果 -->
+                <div id="displayData" class="display-data"></div>
+                
+                <!-- 操作按钮 -->
+                <div class="action-buttons">
+                    <button id="editBtn" class="btn btn-info" onclick="editData()" disabled>
+                        <i class="fas fa-edit"></i> 编辑
                     </button>
-                    <button class="print-btn" id="printBtn" onclick="printData()" disabled>
-                        🖨️ 打印文件
+                    <button id="addToHistoryBtn" class="btn btn-success" onclick="addToHistory()" disabled>
+                        <i class="fas fa-plus"></i> 添加到历史记录
                     </button>
-                    <button class="upload-btn" onclick="resetForm()">
-                        🔄 继续识别
+                    <button class="btn btn-primary" onclick="resetForm()">
+                        <i class="fas fa-redo"></i> 继续识别
                     </button>
                 </div>
             </div>
+
+            <!-- 历史记录区域 -->
+            <div id="historySection" class="history-section" style="display: none;">
+                <h3><i class="fas fa-history"></i> 历史记录</h3>
+                <div class="history-controls">
+                    <button id="selectAllBtn" class="btn btn-sm btn-outline-primary" onclick="selectAll()">
+                        <i class="fas fa-check-square"></i> 全选
+                    </button>
+                    <button id="selectNoneBtn" class="btn btn-sm btn-outline-secondary" onclick="selectNone()">
+                        <i class="fas fa-square"></i> 取消全选
+                    </button>
+                    <span class="selected-count">已选择: <span id="selectedCount">0</span> 条记录</span>
+                </div>
+                <div class="table-responsive">
+                    <table id="historyTable" class="table table-striped table-hover">
+                        <thead>
+                            <tr>
+                                <th width="50">
+                                    <input type="checkbox" id="selectAllCheckbox" onchange="toggleSelectAll()">
+                                </th>
+                                <th width="150">导入时间</th>
+                                <th width="120">Numero Documento</th>
+                                <th width="100">Quantita</th>
+                                <th>Descrizione Articolo</th>
+                                <th width="100">操作</th>
+                            </tr>
+                        </thead>
+                        <tbody id="historyTableBody">
+                            <!-- 历史记录将在这里动态添加 -->
+                        </tbody>
+                    </table>
+                </div>
+                
+                <!-- 批量操作按钮 -->
+                <div class="batch-actions">
+                    <button id="exportSelectedBtn" class="btn btn-primary" onclick="exportSelected()" disabled>
+                        <i class="fas fa-download"></i> 导出选中记录
+                    </button>
+                    <button id="printSelectedBtn" class="btn btn-secondary" onclick="printSelected()" disabled>
+                        <i class="fas fa-print"></i> 打印选中记录
+                    </button>
+                    <button id="deleteSelectedBtn" class="btn btn-danger" onclick="deleteSelected()" disabled>
+                        <i class="fas fa-trash"></i> 删除选中记录
+                    </button>
+                </div>
+            </div>
+
+            <!-- 消息提示区域 -->
+            <div id="messageArea"></div>
         </div>
     </div>
 
     <script>
+        // 全局变量
         let currentSessionId = null;
-        let hasData = false;
+        let currentData = null;
+        let historyData = [];
         let cameraStream = null;
 
+        // DOM 元素
         const fileInput = document.getElementById('fileInput');
         const uploadArea = document.getElementById('uploadArea');
         const progress = document.getElementById('progress');
         const progressBar = document.getElementById('progressBar');
-        const result = document.getElementById('result');
-        const resultContent = document.getElementById('resultContent');
-        const exportBtn = document.getElementById('exportBtn');
-        const printBtn = document.getElementById('printBtn');
-        const cameraSection = document.getElementById('cameraSection');
-        const cameraVideo = document.getElementById('cameraVideo');
-        const captureCanvas = document.getElementById('captureCanvas');
+        const results = document.getElementById('results');
+        const displayData = document.getElementById('displayData');
+        const editForm = document.getElementById('editForm');
+        const historySection = document.getElementById('historySection');
+        const historyTableBody = document.getElementById('historyTableBody');
+        const messageArea = document.getElementById('messageArea');
 
-        uploadArea.addEventListener('dragover', (e) => {
-            e.preventDefault();
-            uploadArea.classList.add('dragover');
+        // 初始化
+        document.addEventListener('DOMContentLoaded', function() {
+            loadHistoryData();
+            setupEventListeners();
         });
 
-        uploadArea.addEventListener('dragleave', () => {
-            uploadArea.classList.remove('dragover');
-        });
+        function setupEventListeners() {
+            // 拖拽上传
+            uploadArea.addEventListener('dragover', (e) => {
+                e.preventDefault();
+                uploadArea.classList.add('dragover');
+            });
 
-        uploadArea.addEventListener('drop', (e) => {
-            e.preventDefault();
-            uploadArea.classList.remove('dragover');
-            const files = e.dataTransfer.files;
-            if (files.length > 0) {
-                handleFile(files[0]);
-            }
-        });
+            uploadArea.addEventListener('dragleave', () => {
+                uploadArea.classList.remove('dragover');
+            });
 
-        fileInput.addEventListener('change', (e) => {
-            if (e.target.files.length > 0) {
-                handleFile(e.target.files[0]);
-            }
-        });
+            uploadArea.addEventListener('drop', (e) => {
+                e.preventDefault();
+                uploadArea.classList.remove('dragover');
+                const files = e.dataTransfer.files;
+                if (files.length > 0) {
+                    handleFile(files[0]);
+                }
+            });
 
+            // 文件选择
+            fileInput.addEventListener('change', (e) => {
+                if (e.target.files.length > 0) {
+                    handleFile(e.target.files[0]);
+                }
+            });
+        }
+
+        // 文件处理
         async function handleFile(file) {
             if (!file.type.startsWith('image/') && file.type !== 'application/pdf') {
-                showError('请选择图片文件或PDF文件！');
+                showMessage('请选择图片文件或PDF文件！', 'danger');
                 return;
             }
 
@@ -401,7 +622,6 @@
                 const formData = new FormData();
                 formData.append('file', file);
                 
-                // 根据文件类型选择不同的API端点
                 const endpoint = file.type === 'application/pdf' ? '/api/pdf-ocr-and-process' : '/api/ocr-and-process';
 
                 updateProgress(30, '正在上传文件...');
@@ -421,58 +641,394 @@
                     showProgress(false);
                     if (data.success) {
                         displayResult(data);
-                        hasData = true;
-                        exportBtn.disabled = false;
-                        printBtn.disabled = false;
                     } else {
-                        showError(data.message || '识别失败，请重试');
+                        showMessage(data.message || '识别失败，请重试', 'danger');
                     }
                 }, 1000);
 
             } catch (error) {
                 showProgress(false);
-                showError(`处理失败: ${error.message}`);
+                showMessage(`处理失败: ${error.message}`, 'danger');
             }
         }
 
+        // 显示识别结果
         function displayResult(data) {
-            const { extractedFields, mapping, sessionId, filename } = data;
+            currentData = {
+                ...data,
+                timestamp: new Date().toISOString()
+            };
 
-            let html = `
-                <div class="session-info">
-                    <strong>文件:</strong> ${filename}
-                </div>
-                
-                <div class="extracted-fields">
-            `;
-
-            Object.keys(extractedFields).forEach(key => {
-                const value = extractedFields[key] || '未识别';
-                const mappingInfo = mapping[key] || '';
-                
+            let html = '';
+            const fields = ['Numero Documento', 'Quantita', 'Descrizione Articolo'];
+            
+            fields.forEach(field => {
+                const value = data.extractedFields[field] || '未识别';
                 html += `
                     <div class="field-item">
-                        <div class="field-label">${key}</div>
+                        <div class="field-label">${field}:</div>
                         <div class="field-value">${value}</div>
-                        <div class="field-mapping">→ ${mappingInfo}</div>
                     </div>
                 `;
             });
 
-            html += '</div>';
+            displayData.innerHTML = html;
+            results.style.display = 'block';
+            
+            // 启用按钮
+            document.getElementById('editBtn').disabled = false;
+            document.getElementById('addToHistoryBtn').disabled = false;
 
-            resultContent.innerHTML = html;
-            result.style.display = 'block';
-            result.classList.remove('error');
+            showMessage('文档识别完成！您可以编辑结果或添加到历史记录。', 'success');
         }
 
-        function showError(message) {
-            resultContent.innerHTML = `<p><strong>错误:</strong> ${message}</p>`;
-            result.style.display = 'block';
-            result.classList.add('error');
-            hasData = false;
-            exportBtn.disabled = true;
-            printBtn.disabled = true;
+        // 编辑数据
+        function editData() {
+            if (!currentData) return;
+
+            // 填充编辑表单
+            document.getElementById('editNumeroDocumento').value = currentData.extractedFields['Numero Documento'] || '';
+            document.getElementById('editQuantita').value = currentData.extractedFields['Quantita'] || '';
+            document.getElementById('editDescrizioneArticolo').value = currentData.extractedFields['Descrizione Articolo'] || '';
+
+            // 显示编辑表单，隐藏显示区域
+            editForm.style.display = 'block';
+            displayData.style.display = 'none';
+        }
+
+        // 保存编辑的数据
+        function saveEditedData() {
+            const numeroDocumento = document.getElementById('editNumeroDocumento').value.trim();
+            const quantita = document.getElementById('editQuantita').value.trim();
+            const descrizioneArticolo = document.getElementById('editDescrizioneArticolo').value.trim();
+
+            // 更新当前数据
+            currentData.extractedFields = {
+                'Numero Documento': numeroDocumento,
+                'Quantita': quantita,
+                'Descrizione Articolo': descrizioneArticolo
+            };
+
+            // 重新显示结果
+            displayResult(currentData);
+            cancelEdit();
+            
+            showMessage('数据已保存！', 'success');
+        }
+
+        // 取消编辑
+        function cancelEdit() {
+            editForm.style.display = 'none';
+            displayData.style.display = 'block';
+        }
+
+        // 添加到历史记录
+        function addToHistory() {
+            if (!currentData) return;
+
+            // 检查是否已存在相同记录
+            const isDuplicate = historyData.some(item => 
+                item.extractedFields['Numero Documento'] === currentData.extractedFields['Numero Documento'] &&
+                item.extractedFields['Quantita'] === currentData.extractedFields['Quantita'] &&
+                item.extractedFields['Descrizione Articolo'] === currentData.extractedFields['Descrizione Articolo']
+            );
+
+            if (isDuplicate) {
+                showMessage('该记录已存在于历史记录中！', 'warning');
+                return;
+            }
+
+            // 添加到历史记录
+            const historyItem = {
+                id: generateId(),
+                timestamp: new Date().toISOString(),
+                extractedFields: { ...currentData.extractedFields },
+                filename: currentData.filename || '未知文件'
+            };
+
+            historyData.push(historyItem);
+            saveHistoryData();
+            renderHistoryTable();
+            
+            // 显示历史记录区域
+            historySection.style.display = 'block';
+            
+            showMessage('记录已添加到历史记录！', 'success');
+        }
+
+        // 渲染历史记录表格
+        function renderHistoryTable() {
+            if (historyData.length === 0) {
+                historyTableBody.innerHTML = '<tr><td colspan="6" style="text-align: center; color: #666;">暂无历史记录</td></tr>';
+                return;
+            }
+
+            // 按时间倒序排列（最新的在前面）
+            const sortedData = [...historyData].sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
+
+            historyTableBody.innerHTML = sortedData.map(item => `
+                <tr>
+                    <td>
+                        <input type="checkbox" class="record-checkbox" value="${item.id}" onchange="updateSelectedCount()">
+                    </td>
+                    <td>${formatDateTime(item.timestamp)}</td>
+                    <td>${item.extractedFields['Numero Documento'] || '-'}</td>
+                    <td>${item.extractedFields['Quantita'] || '-'}</td>
+                    <td>${item.extractedFields['Descrizione Articolo'] || '-'}</td>
+                    <td>
+                        <button class="btn btn-sm btn-danger" onclick="deleteRecord('${item.id}')">
+                            <i class="fas fa-trash"></i>
+                        </button>
+                    </td>
+                </tr>
+            `).join('');
+
+            updateSelectedCount();
+        }
+
+        // 选择/取消选择所有记录
+        function toggleSelectAll() {
+            const selectAllCheckbox = document.getElementById('selectAllCheckbox');
+            const checkboxes = document.querySelectorAll('.record-checkbox');
+            
+            checkboxes.forEach(checkbox => {
+                checkbox.checked = selectAllCheckbox.checked;
+            });
+            
+            updateSelectedCount();
+        }
+
+        function selectAll() {
+            document.getElementById('selectAllCheckbox').checked = true;
+            toggleSelectAll();
+        }
+
+        function selectNone() {
+            document.getElementById('selectAllCheckbox').checked = false;
+            toggleSelectAll();
+        }
+
+        // 更新选中计数
+        function updateSelectedCount() {
+            const checkboxes = document.querySelectorAll('.record-checkbox:checked');
+            const count = checkboxes.length;
+            
+            document.getElementById('selectedCount').textContent = count;
+            
+            // 更新批量操作按钮状态
+            const hasSelection = count > 0;
+            document.getElementById('exportSelectedBtn').disabled = !hasSelection;
+            document.getElementById('printSelectedBtn').disabled = !hasSelection;
+            document.getElementById('deleteSelectedBtn').disabled = !hasSelection;
+        }
+
+        // 导出选中记录
+        async function exportSelected() {
+            const selectedIds = getSelectedRecordIds();
+            if (selectedIds.length === 0) {
+                showMessage('请选择要导出的记录！', 'warning');
+                return;
+            }
+
+            try {
+                const selectedRecords = historyData.filter(item => selectedIds.includes(item.id));
+                
+                // 创建临时会话ID
+                const tempSessionId = generateSessionId();
+                
+                // 发送选中的记录到后端
+                const response = await fetch('/api/export-selected', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        sessionId: tempSessionId,
+                        records: selectedRecords
+                    })
+                });
+
+                if (response.ok) {
+                    const blob = await response.blob();
+                    const url = window.URL.createObjectURL(blob);
+                    const a = document.createElement('a');
+                    a.href = url;
+                    a.download = `FileCognize_Selected_${formatDateTime(new Date().toISOString()).replace(/[:\s]/g, '-')}.xlsx`;
+                    document.body.appendChild(a);
+                    a.click();
+                    document.body.removeChild(a);
+                    window.URL.revokeObjectURL(url);
+                    
+                    showMessage(`成功导出 ${selectedIds.length} 条记录！`, 'success');
+                } else {
+                    throw new Error('导出失败');
+                }
+            } catch (error) {
+                showMessage(`导出失败: ${error.message}`, 'danger');
+            }
+        }
+
+        // 打印选中记录
+        async function printSelected() {
+            const selectedIds = getSelectedRecordIds();
+            if (selectedIds.length === 0) {
+                showMessage('请选择要打印的记录！', 'warning');
+                return;
+            }
+
+            try {
+                const selectedRecords = historyData.filter(item => selectedIds.includes(item.id));
+                
+                // 创建临时会话ID
+                const tempSessionId = generateSessionId();
+                
+                // 发送选中的记录到后端生成打印页面
+                const response = await fetch('/api/print-selected', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        sessionId: tempSessionId,
+                        records: selectedRecords
+                    })
+                });
+
+                if (response.ok) {
+                    const htmlContent = await response.text();
+                    const printWindow = window.open('', '_blank');
+                    printWindow.document.write(htmlContent);
+                    printWindow.document.close();
+                    printWindow.focus();
+                    
+                    // 等待内容加载完成后打印
+                    setTimeout(() => {
+                        printWindow.print();
+                    }, 1000);
+                    
+                    showMessage(`成功准备打印 ${selectedIds.length} 条记录！`, 'success');
+                } else {
+                    throw new Error('打印准备失败');
+                }
+            } catch (error) {
+                showMessage(`打印失败: ${error.message}`, 'danger');
+            }
+        }
+
+        // 删除选中记录
+        function deleteSelected() {
+            const selectedIds = getSelectedRecordIds();
+            if (selectedIds.length === 0) {
+                showMessage('请选择要删除的记录！', 'warning');
+                return;
+            }
+
+            if (confirm(`确定要删除选中的 ${selectedIds.length} 条记录吗？此操作不可撤销。`)) {
+                historyData = historyData.filter(item => !selectedIds.includes(item.id));
+                saveHistoryData();
+                renderHistoryTable();
+                
+                showMessage(`成功删除 ${selectedIds.length} 条记录！`, 'success');
+            }
+        }
+
+        // 删除单条记录
+        function deleteRecord(id) {
+            if (confirm('确定要删除这条记录吗？此操作不可撤销。')) {
+                historyData = historyData.filter(item => item.id !== id);
+                saveHistoryData();
+                renderHistoryTable();
+                
+                showMessage('记录已删除！', 'success');
+            }
+        }
+
+        // 获取选中记录的ID
+        function getSelectedRecordIds() {
+            const checkboxes = document.querySelectorAll('.record-checkbox:checked');
+            return Array.from(checkboxes).map(checkbox => checkbox.value);
+        }
+
+        // 相机功能
+        async function openCamera() {
+            try {
+                cameraStream = await navigator.mediaDevices.getUserMedia({ 
+                    video: { facingMode: 'environment' } 
+                });
+                
+                const video = document.getElementById('cameraVideo');
+                video.srcObject = cameraStream;
+                
+                document.getElementById('cameraSection').style.display = 'block';
+                document.getElementById('cameraStatus').textContent = '相机已就绪，点击拍照按钮进行识别';
+            } catch (error) {
+                showMessage('无法访问相机，请检查权限设置', 'danger');
+            }
+        }
+
+        function closeCamera() {
+            if (cameraStream) {
+                cameraStream.getTracks().forEach(track => track.stop());
+                cameraStream = null;
+            }
+            document.getElementById('cameraSection').style.display = 'none';
+        }
+
+        function capturePhoto() {
+            const video = document.getElementById('cameraVideo');
+            const canvas = document.getElementById('captureCanvas');
+            const context = canvas.getContext('2d');
+            
+            canvas.width = video.videoWidth;
+            canvas.height = video.videoHeight;
+            context.drawImage(video, 0, 0);
+            
+            canvas.toBlob(blob => {
+                const file = new File([blob], 'camera-capture.jpg', { type: 'image/jpeg' });
+                closeCamera();
+                handleFile(file);
+            }, 'image/jpeg', 0.8);
+        }
+
+        // 重置表单
+        function resetForm() {
+            currentData = null;
+            currentSessionId = null;
+            
+            results.style.display = 'none';
+            editForm.style.display = 'none';
+            displayData.style.display = 'block';
+            
+            document.getElementById('editBtn').disabled = true;
+            document.getElementById('addToHistoryBtn').disabled = true;
+            
+            fileInput.value = '';
+            
+            // 如果有历史记录，显示历史记录区域
+            if (historyData.length > 0) {
+                historySection.style.display = 'block';
+            }
+        }
+
+        // 工具函数
+        function generateSessionId() {
+            return 'session_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9);
+        }
+
+        function generateId() {
+            return 'record_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9);
+        }
+
+        function formatDateTime(isoString) {
+            const date = new Date(isoString);
+            return date.toLocaleString('zh-CN', {
+                year: 'numeric',
+                month: '2-digit',
+                day: '2-digit',
+                hour: '2-digit',
+                minute: '2-digit',
+                second: '2-digit'
+            });
         }
 
         function showProgress(show) {
@@ -487,285 +1043,42 @@
             progressBar.textContent = text || `${percent}%`;
         }
 
-        async function exportData() {
-            if (!currentSessionId || !hasData) {
-                showError('没有可导出的数据');
-                return;
-            }
+        function showMessage(message, type = 'info') {
+            const alertClass = `alert-${type}`;
+            const iconClass = type === 'success' ? 'fa-check-circle' : 
+                             type === 'danger' ? 'fa-exclamation-circle' : 
+                             type === 'warning' ? 'fa-exclamation-triangle' : 'fa-info-circle';
+            
+            const messageHtml = `
+                <div class="alert ${alertClass}">
+                    <i class="fas ${iconClass}"></i> ${message}
+                </div>
+            `;
+            
+            messageArea.innerHTML = messageHtml;
+            
+            // 3秒后自动隐藏消息
+            setTimeout(() => {
+                messageArea.innerHTML = '';
+            }, 3000);
+        }
 
-            try {
-                exportBtn.disabled = true;
-                exportBtn.textContent = '正在导出...';
+        // 本地存储功能
+        function saveHistoryData() {
+            localStorage.setItem('fileCognizeHistory', JSON.stringify(historyData));
+        }
 
-                const response = await fetch(`/api/export/${currentSessionId}`);
-                
-                if (response.ok) {
-                    const blob = await response.blob();
-                    const url = window.URL.createObjectURL(blob);
-                    const a = document.createElement('a');
-                    a.href = url;
-                    a.download = `FileCognize_Export_${currentSessionId}_${new Date().toISOString().slice(0, 19).replace(/:/g, '-')}.xlsx`;
-                    document.body.appendChild(a);
-                    a.click();
-                    document.body.removeChild(a);
-                    window.URL.revokeObjectURL(url);
-                    
-                    const successMsg = document.createElement('div');
-                    successMsg.style.cssText = 'position: fixed; top: 20px; right: 20px; background: #28a745; color: white; padding: 15px; border-radius: 5px; z-index: 1000;';
-                    successMsg.textContent = '✅ Excel文件导出成功！';
-                    document.body.appendChild(successMsg);
-                    setTimeout(() => document.body.removeChild(successMsg), 3000);
-                } else {
-                    const errorData = await response.json();
-                    showError(errorData.message || '导出失败');
+        function loadHistoryData() {
+            const saved = localStorage.getItem('fileCognizeHistory');
+            if (saved) {
+                historyData = JSON.parse(saved);
+                if (historyData.length > 0) {
+                    historySection.style.display = 'block';
+                    renderHistoryTable();
                 }
-            } catch (error) {
-                showError(`导出失败: ${error.message}`);
-            } finally {
-                exportBtn.disabled = false;
-                exportBtn.textContent = '📥 导出Excel文件';
             }
         }
-
-        function resetForm() {
-            result.style.display = 'none';
-            fileInput.value = '';
-            hasData = false;
-            exportBtn.disabled = true;
-            printBtn.disabled = true;
-            currentSessionId = null;
-            closeCamera();
-        }
-
-        function generateSessionId() {
-            return 'session_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9);
-        }
-
-        // 相机功能
-        async function openCamera() {
-            try {
-                console.log('正在启动相机...');
-                
-                // 显示相机界面
-                cameraSection.style.display = 'block';
-                document.querySelector('.upload-buttons').style.display = 'none';
-                document.querySelector('h3').textContent = '📷 相机拍照';
-                document.querySelector('p').textContent = '对准文档，点击拍照按钮';
-                
-                const cameraStatus = document.getElementById('cameraStatus');
-                cameraStatus.textContent = '正在启动相机...';
-                
-                cameraStream = await navigator.mediaDevices.getUserMedia({ 
-                    video: { 
-                        facingMode: 'environment', // 优先使用后置摄像头
-                        width: { ideal: 1280 },
-                        height: { ideal: 720 }
-                    } 
-                });
-                
-                console.log('相机启动成功');
-                cameraVideo.srcObject = cameraStream;
-                
-                // 等待视频开始播放
-                cameraVideo.onloadedmetadata = () => {
-                    console.log('视频元数据加载完成');
-                    cameraStatus.textContent = '相机已就绪，对准文档点击拍照';
-                };
-                
-                cameraVideo.onplaying = () => {
-                    console.log('视频开始播放');
-                    cameraStatus.style.display = 'none';
-                };
-                
-            } catch (error) {
-                console.error('相机启动失败:', error);
-                const cameraStatus = document.getElementById('cameraStatus');
-                cameraStatus.textContent = '相机启动失败';
-                
-                let errorMessage = '无法访问摄像头';
-                if (error.name === 'NotAllowedError') {
-                    errorMessage = '请允许访问摄像头权限';
-                } else if (error.name === 'NotFoundError') {
-                    errorMessage = '未找到摄像头设备';
-                } else if (error.name === 'NotSupportedError') {
-                    errorMessage = '浏览器不支持摄像头功能';
-                } else if (location.protocol !== 'https:' && location.hostname !== 'localhost') {
-                    errorMessage = '请使用HTTPS访问或在localhost测试';
-                }
-                
-                showError(errorMessage);
-                closeCamera();
-            }
-        }
-
-        function closeCamera() {
-            if (cameraStream) {
-                cameraStream.getTracks().forEach(track => track.stop());
-                cameraStream = null;
-            }
-            cameraSection.style.display = 'none';
-            // 恢复原始界面
-            document.querySelector('.upload-buttons').style.display = 'flex';
-            document.querySelector('h3').textContent = '📁 上传文档';
-            document.querySelector('p').textContent = '支持图片和PDF文件，点击选择文件或拖拽到此处';
-            
-            // 重置相机状态
-            const cameraStatus = document.getElementById('cameraStatus');
-            cameraStatus.style.display = 'block';
-            cameraStatus.textContent = '正在启动相机...';
-        }
-
-        function capturePhoto() {
-            const canvas = captureCanvas;
-            const video = cameraVideo;
-            
-            canvas.width = video.videoWidth;
-            canvas.height = video.videoHeight;
-            
-            const ctx = canvas.getContext('2d');
-            ctx.drawImage(video, 0, 0);
-            
-            canvas.toBlob(blob => {
-                const file = new File([blob], 'camera-capture.jpg', { type: 'image/jpeg' });
-                closeCamera();
-                handleFile(file);
-            }, 'image/jpeg', 0.8);
-        }
-
-        // 打印功能
-        async function printData() {
-            if (!hasData || !currentSessionId) {
-                showError('没有可打印的数据');
-                return;
-            }
-
-            try {
-                printBtn.disabled = true;
-                printBtn.textContent = '正在准备打印...';
-                
-                updateProgress(20, '正在获取数据...');
-                showProgress(true);
-
-                // 获取会话数据用于打印预览
-                const response = await fetch(`/api/sessions/${currentSessionId}`);
-                
-                if (!response.ok) {
-                    throw new Error('获取数据失败');
-                }
-
-                const sessionData = await response.json();
-                updateProgress(60, '正在生成打印预览...');
-
-                // 创建打印预览HTML
-                const printContent = generatePrintHTML(sessionData);
-                
-                // 创建新窗口用于打印
-                const printWindow = window.open('', '_blank');
-                printWindow.document.write(printContent);
-                printWindow.document.close();
-                
-                updateProgress(100, '打印准备完成！');
-                
-                setTimeout(() => {
-                    showProgress(false);
-                    printWindow.print();
-                    
-                    // 显示成功消息
-                    const successMsg = document.createElement('div');
-                    successMsg.style.cssText = "position: fixed; top: 20px; right: 20px; background: #FF9800; color: white; padding: 15px; border-radius: 5px; z-index: 1000;";
-                    successMsg.textContent = "🖨️ 打印预览已打开！";
-                    document.body.appendChild(successMsg);
-                    setTimeout(() => document.body.removeChild(successMsg), 3000);
-                    
-                    // 打印完成后关闭窗口
-                    setTimeout(() => {
-                        printWindow.close();
-                    }, 5000);
-                }, 500);
-
-            } catch (error) {
-                showProgress(false);
-                showError(`打印失败: ${error.message}`);
-            } finally {
-                printBtn.disabled = false;
-                printBtn.textContent = '🖨️ 打印文件';
-            }
-        }
-
-        // 生成打印HTML内容 - 模拟Excel表格样式
-        function generatePrintHTML(sessionData) {
-            const documents = sessionData.documents || [];
-            const timestamp = new Date().toLocaleString('zh-CN');
-            const sessionId = sessionData.sessionId || 'unknown';
-            
-            // 生成数据行
-            let tableRows = '';
-            documents.forEach((doc, index) => {
-                const data = doc.extractedData || {};
-                const quantita = data['Quantita'] || '';
-                const descrizione = data['Descrizione Articolo'] || '';
-                const numeroDoc = data['Numero Documento'] || '';
-                
-                tableRows += '<tr>' +
-                    '<td class="data-cell">' + quantita + '</td>' +
-                    '<td class="data-cell">' + descrizione + '</td>' +
-                    '<td class="data-cell"></td>' +
-                    '<td class="data-cell"></td>' +
-                    '<td class="data-cell"></td>' +
-                    '<td class="data-cell"></td>' +
-                    '<td class="data-cell">' + numeroDoc + '</td>' +
-                    '</tr>';
-            });
-
-            // 生成空行
-            const emptyRowHtml = '<tr class="empty-row"><td></td><td></td><td></td><td></td><td></td><td></td><td></td></tr>';
-            const emptyRows = Array(9).fill(emptyRowHtml).join('');
-            const additionalEmptyRows = Array(Math.max(0, 28 - documents.length)).fill(emptyRowHtml).join('');
-
-            return '<!DOCTYPE html>' +
-                '<html>' +
-                '<head>' +
-                '<meta charset="UTF-8">' +
-                '<title>FileCognize Print Preview</title>' +
-                '<style>' +
-                '@media print { body { margin: 0; } .no-print { display: none; } .print-header { margin-bottom: 20px; } }' +
-                'body { font-family: Arial, sans-serif; margin: 20px; line-height: 1.2; background: white; }' +
-                '.print-header { text-align: center; margin-bottom: 30px; border-bottom: 2px solid #333; padding-bottom: 15px; }' +
-                '.print-header h1 { margin: 0; color: #333; font-size: 24px; }' +
-                '.print-info { margin-bottom: 20px; font-size: 12px; color: #666; }' +
-                '.excel-table { width: 100%; border-collapse: collapse; margin-bottom: 20px; font-size: 11px; }' +
-                '.excel-table th, .excel-table td { border: 1px solid #000; padding: 4px 6px; text-align: left; vertical-align: middle; height: 20px; }' +
-                '.excel-table th { background-color: #f0f0f0; font-weight: bold; text-align: center; }' +
-                '.header-row { background-color: #e6e6e6; font-weight: bold; }' +
-                '.data-cell { background-color: white; }' +
-                '.empty-row td { height: 20px; background-color: white; }' +
-                '.print-footer { margin-top: 30px; text-align: center; font-size: 10px; color: #999; border-top: 1px solid #ddd; padding-top: 10px; }' +
-                '.no-print { position: fixed; top: 10px; right: 10px; background: #2196F3; color: white; padding: 10px; border-radius: 5px; cursor: pointer; z-index: 1000; }' +
-                '</style>' +
-                '</head>' +
-                '<body>' +
-                '<div class="no-print" onclick="window.print()">🖨️ 点击打印</div>' +
-                '<div class="print-header"><h1>Transport Document</h1></div>' +
-                '<div class="print-info">' +
-                '<p><strong>Generated:</strong> ' + timestamp + ' | <strong>Documents:</strong> ' + documents.length + ' | <strong>Session:</strong> ' + sessionId + '</p>' +
-                '</div>' +
-                '<table class="excel-table">' +
-                '<tr class="header-row"><td>A</td><td>B</td><td>C</td><td>D</td><td>E</td><td>F</td><td>G</td></tr>' +
-                '<tr><th>QUANTITA</th><th>DESCRIZIONE DEI BENI</th><th></th><th></th><th></th><th></th><th>IMPORTO</th></tr>' +
-                emptyRows +
-                tableRows +
-                additionalEmptyRows +
-                '</table>' +
-                '<div class="print-footer">' +
-                '<p>Generated by FileCognize Document Recognition System | ' + timestamp + '</p>' +
-                '</div>' +
-                '<scr' + 'ipt>' +
-                'window.onload = function() { setTimeout(() => { window.print(); }, 500); };' +
-                '</scr' + 'ipt>' +
-                '</body>' +
-                '</html>';
-        }
-
     </script>
 </body>
+</html> 
 </html> 

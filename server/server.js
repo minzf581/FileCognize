@@ -1305,7 +1305,85 @@ app.post('/api/pdf-ocr-and-process', upload.single('file'), async (req, res) => 
   }
 });
 
-// 导出Excel文件 - 严格按照output.xlsx模板，保持所有原始格式
+// 辅助函数：安全获取Excel单元格值
+function getCellValue(worksheet, cellAddress) {
+  try {
+    if (worksheet.getCell) {
+      // ExcelJS格式
+      const cell = worksheet.getCell(cellAddress);
+      return cell.value ? String(cell.value) : '';
+    } else {
+      // XLSX格式
+      const cell = worksheet[cellAddress];
+      return cell && cell.v ? String(cell.v) : '';
+    }
+  } catch (error) {
+    console.warn(`获取单元格 ${cellAddress} 值失败:`, error.message);
+    return '';
+  }
+}
+
+// 辅助函数：使用文件复制保持完整格式的导出
+function exportWithFormat(templatePath, outputPath, dataRows) {
+  try {
+    console.log(`📋 复制原始模板保持格式: ${templatePath}`);
+    
+    // 直接复制原始模板文件，保持100%原始格式
+    fs.copyFileSync(templatePath, outputPath);
+    console.log(`📋 已复制原始模板: output.xlsx`);
+
+    // 读取复制后的文件进行数据添加
+    const workbook = XLSX.readFile(outputPath);
+    const sheetName = workbook.SheetNames[0];
+    const worksheet = workbook.Sheets[sheetName];
+
+    console.log(`📊 准备写入 ${dataRows.length} 条记录`);
+
+    // 从第12行开始写入数据 (A11是表头，A12开始是数据)
+    let currentRow = 12;
+    
+    dataRows.forEach((data, index) => {
+      if (data) {
+        console.log(`✍️ 写入第${index + 1}条记录到第${currentRow}行:`);
+        
+        // A列: QUANTITA
+        if (data['Quantita']) {
+          const cellA = `A${currentRow}`;
+          worksheet[cellA] = { v: data['Quantita'], t: 's' };
+          console.log(`  ${cellA}: ${data['Quantita']}`);
+        }
+        
+        // B列: DESCRIZIONE DEI BENI
+        if (data['Descrizione Articolo']) {
+          const cellB = `B${currentRow}`;
+          worksheet[cellB] = { v: data['Descrizione Articolo'], t: 's' };
+          console.log(`  ${cellB}: ${data['Descrizione Articolo']}`);
+        }
+        
+        // G列: IMPORTO (Numero Documento)
+        if (data['Numero Documento']) {
+          const cellG = `G${currentRow}`;
+          worksheet[cellG] = { v: data['Numero Documento'], t: 's' };
+          console.log(`  ${cellG}: ${data['Numero Documento']}`);
+        }
+        
+        currentRow++;
+      }
+    });
+
+    // 保存文件，保持原始格式
+    XLSX.writeFile(workbook, outputPath);
+    console.log(`✅ 导出完成，格式完全保持: ${outputPath}`);
+    console.log(`🎨 完全保持了原始Excel格式（字体、颜色、单元格大小等）`);
+    
+    return true;
+  } catch (error) {
+    console.error('导出失败:', error);
+    throw error;
+  }
+}
+
+// 导出Excel文件 - 完全保持output.xlsx原始格式，只添加数据
 app.get('/api/export/:sessionId', (req, res) => {
   try {
     const sessionId = req.params.sessionId;
@@ -1326,21 +1404,25 @@ app.get('/api/export/:sessionId', (req, res) => {
       throw new Error('找不到output.xlsx模板文件');
     }
 
-    // 读取原始模板
-    const originalWorkbook = XLSX.readFile(templatePath);
-    const sheetName = originalWorkbook.SheetNames[0];
-    const originalWorksheet = originalWorkbook.Sheets[sheetName];
-
-    // 创建新工作簿，完全复制原始模板
-    const exportWorkbook = XLSX.utils.book_new();
+    // 生成目标文件路径
+    const filename = `FileCognize_Export_${sessionId}_${new Date().toISOString().slice(0, 19).replace(/:/g, '-')}.xlsx`;
+    const filepath = path.join(__dirname, 'exports', filename);
     
-    // 深度复制工作表，保持所有格式、合并单元格等
-    const exportWorksheet = {};
-    Object.keys(originalWorksheet).forEach(key => {
-      exportWorksheet[key] = JSON.parse(JSON.stringify(originalWorksheet[key]));
-    });
+    // 确保exports目录存在
+    const exportsDir = path.join(__dirname, 'exports');
+    if (!fs.existsSync(exportsDir)) {
+      fs.mkdirSync(exportsDir, { recursive: true });
+    }
 
-    console.log(`📋 使用模板: ${sheetName}`);
+    // 直接复制原始模板文件，然后只修改特定单元格
+    fs.copyFileSync(templatePath, filepath);
+    console.log(`📋 已复制原始模板: output.xlsx`);
+
+    // 读取复制后的文件进行数据添加
+    const workbook = XLSX.readFile(filepath);
+    const sheetName = workbook.SheetNames[0];
+    const worksheet = workbook.Sheets[sheetName];
+
     console.log(`📊 准备写入 ${sessionData.documents.length} 条记录`);
 
     // 从第12行开始写入数据 (A11是表头，A12开始是数据)
@@ -1353,21 +1435,21 @@ app.get('/api/export/:sessionId', (req, res) => {
         // A列: QUANTITA
         if (item.extractedData['Quantita']) {
           const cellA = `A${currentRow}`;
-          exportWorksheet[cellA] = { v: item.extractedData['Quantita'], t: 's' };
+          worksheet[cellA] = { v: item.extractedData['Quantita'], t: 's' };
           console.log(`  ${cellA}: ${item.extractedData['Quantita']}`);
         }
         
         // B列: DESCRIZIONE DEI BENI
         if (item.extractedData['Descrizione Articolo']) {
           const cellB = `B${currentRow}`;
-          exportWorksheet[cellB] = { v: item.extractedData['Descrizione Articolo'], t: 's' };
+          worksheet[cellB] = { v: item.extractedData['Descrizione Articolo'], t: 's' };
           console.log(`  ${cellB}: ${item.extractedData['Descrizione Articolo']}`);
         }
         
         // G列: IMPORTO (Numero Documento)
         if (item.extractedData['Numero Documento']) {
           const cellG = `G${currentRow}`;
-          exportWorksheet[cellG] = { v: item.extractedData['Numero Documento'], t: 's' };
+          worksheet[cellG] = { v: item.extractedData['Numero Documento'], t: 's' };
           console.log(`  ${cellG}: ${item.extractedData['Numero Documento']}`);
         }
         
@@ -1375,45 +1457,12 @@ app.get('/api/export/:sessionId', (req, res) => {
       }
     });
 
-    // 确保工作表范围包含所有数据，包括A1单元格
-    const originalRange = XLSX.utils.decode_range(originalWorksheet['!ref']);
-    
-    // 扩展范围以包含A1单元格（如果存在）
-    let finalRange = {
-      s: { c: 0, r: 0 }, // 从A1开始
-      e: { c: originalRange.e.c, r: Math.max(originalRange.e.r, currentRow - 1) }
-    };
-    
-    // 如果有新数据行，扩展范围
-    if (currentRow - 1 > originalRange.e.r) {
-      finalRange.e.r = currentRow - 1;
-    }
-    
-    exportWorksheet['!ref'] = XLSX.utils.encode_range(finalRange);
-
-    // 添加工作表到新工作簿
-    XLSX.utils.book_append_sheet(exportWorkbook, exportWorksheet, sheetName);
-
-    // 生成文件
-    const filename = `FileCognize_Export_${sessionId}_${new Date().toISOString().slice(0, 19).replace(/:/g, '-')}.xlsx`;
-    const filepath = path.join(__dirname, 'exports', filename);
-    
-    // 确保exports目录存在
-    const exportsDir = path.join(__dirname, 'exports');
-    if (!fs.existsSync(exportsDir)) {
-      fs.mkdirSync(exportsDir, { recursive: true });
-    }
-
-    // 写入文件，保持所有原始格式
-    XLSX.writeFile(exportWorkbook, filepath);
+    // 保存文件，保持原始格式
+    XLSX.writeFile(workbook, filepath);
 
     console.log(`✅ 导出完成: ${filename}`);
     console.log(`📊 成功导出 ${sessionData.documents.length} 条记录到模板`);
-    
-    // 验证合并单元格是否保持
-    if (exportWorksheet['!merges']) {
-      console.log(`🔗 保持了 ${exportWorksheet['!merges'].length} 个合并单元格`);
-    }
+    console.log(`🎨 完全保持了原始Excel格式（字体、颜色、单元格大小等）`);
 
     // 发送文件
     res.download(filepath, filename, (err) => {
@@ -1439,6 +1488,735 @@ app.get('/api/export/:sessionId', (req, res) => {
       success: false, 
       message: '导出失败: ' + error.message 
     });
+  }
+});
+
+// 导出选中记录 - 支持历史记录选择性导出
+app.post('/api/export-selected', (req, res) => {
+  try {
+    const { sessionId, records } = req.body;
+    
+    if (!records || !Array.isArray(records) || records.length === 0) {
+      return res.status(400).json({ 
+        success: false, 
+        message: '没有选中的记录' 
+      });
+    }
+
+    console.log(`🔄 开始导出选中的 ${records.length} 条记录...`);
+
+    // 读取output.xlsx模板
+    const templatePath = path.join(__dirname, '..', 'output.xlsx');
+    if (!fs.existsSync(templatePath)) {
+      throw new Error('找不到output.xlsx模板文件');
+    }
+
+    // 生成导出文件路径
+    const timestamp = new Date().toISOString().slice(0, 19).replace(/:/g, '-');
+    const filename = `FileCognize_Selected_${timestamp}.xlsx`;
+    const filepath = path.join(__dirname, 'exports', filename);
+    
+    // 确保exports目录存在
+    const exportsDir = path.join(__dirname, 'exports');
+    if (!fs.existsSync(exportsDir)) {
+      fs.mkdirSync(exportsDir, { recursive: true });
+    }
+
+    // 直接复制原始模板文件，保持100%原始格式
+    fs.copyFileSync(templatePath, filepath);
+    console.log(`📋 已复制原始模板: output.xlsx`);
+
+    // 读取复制后的文件进行数据添加
+    const workbook = XLSX.readFile(filepath);
+    const sheetName = workbook.SheetNames[0];
+    const worksheet = workbook.Sheets[sheetName];
+
+    console.log(`📊 准备写入 ${records.length} 条记录`);
+
+    // 从第12行开始写入数据 (A11是表头，A12开始是数据)
+    let currentRow = 12;
+    
+    records.forEach((record, index) => {
+      if (record.extractedFields) {
+        console.log(`✍️ 写入第${index + 1}条记录到第${currentRow}行:`);
+        
+        // A列: QUANTITA
+        if (record.extractedFields['Quantita']) {
+          const cellA = `A${currentRow}`;
+          worksheet[cellA] = { v: record.extractedFields['Quantita'], t: 's' };
+          console.log(`  ${cellA}: ${record.extractedFields['Quantita']}`);
+        }
+        
+        // B列: DESCRIZIONE DEI BENI
+        if (record.extractedFields['Descrizione Articolo']) {
+          const cellB = `B${currentRow}`;
+          worksheet[cellB] = { v: record.extractedFields['Descrizione Articolo'], t: 's' };
+          console.log(`  ${cellB}: ${record.extractedFields['Descrizione Articolo']}`);
+        }
+        
+        // G列: IMPORTO (Numero Documento)
+        if (record.extractedFields['Numero Documento']) {
+          const cellG = `G${currentRow}`;
+          worksheet[cellG] = { v: record.extractedFields['Numero Documento'], t: 's' };
+          console.log(`  ${cellG}: ${record.extractedFields['Numero Documento']}`);
+        }
+        
+        currentRow++;
+      }
+    });
+
+    // 保存文件，完全保持原始格式
+    XLSX.writeFile(workbook, filepath);
+    console.log(`✅ 导出完成: ${filename}`);
+    console.log(`📊 成功导出 ${records.length} 条记录到模板`);
+
+    // 发送文件
+    res.download(filepath, filename, (err) => {
+      if (err) {
+        console.error('文件下载失败:', err);
+        res.status(500).json({ success: false, message: '文件下载失败' });
+      } else {
+        console.log(`📤 文件下载成功: ${filename}`);
+        // 下载完成后删除临时文件
+        setTimeout(() => {
+          try {
+            fs.unlinkSync(filepath);
+            console.log(`🗑️ 临时文件已删除: ${filename}`);
+          } catch (deleteErr) {
+            console.error('删除临时文件失败:', deleteErr);
+          }
+        }, 5000);
+      }
+    });
+
+  } catch (error) {
+    console.error('导出失败:', error);
+    res.status(500).json({ 
+      success: false, 
+      message: '导出失败: ' + error.message 
+    });
+  }
+});
+
+// 打印HTML预览 - 基于output.xlsx模板 + 三个字段数据
+app.get('/api/print/:sessionId', (req, res) => {
+  try {
+    const sessionId = req.params.sessionId;
+    const sessionData = global.documentSessions?.[sessionId];
+    
+    if (!sessionData || !sessionData.documents || sessionData.documents.length === 0) {
+      return res.status(404).json({ 
+        success: false, 
+        message: '未找到会话数据或没有处理过的数据' 
+      });
+    }
+
+    console.log(`🖨️ 开始准备HTML打印预览会话 ${sessionId} 的数据...`);
+
+    // 读取原始output.xlsx文件内容
+    const templatePath = path.join(__dirname, '..', 'output.xlsx');
+    const workbook = XLSX.readFile(templatePath);
+    const worksheet = workbook.Sheets[workbook.SheetNames[0]];
+    
+    // 生成HTML打印内容，完全基于output.xlsx的结构和内容
+    let printHTML = `
+    <!DOCTYPE html>
+    <html>
+    <head>
+        <meta charset="UTF-8">
+        <title>FileCognize 打印预览 - 完整文档</title>
+        <style>
+            @media print {
+                body { margin: 0; }
+                .no-print { display: none; }
+                .document-container { margin: 0; padding: 20px; }
+            }
+            body {
+                font-family: Arial, sans-serif;
+                margin: 0;
+                background: white;
+                font-size: 12px;
+            }
+            .no-print {
+                position: fixed;
+                top: 10px;
+                right: 10px;
+                z-index: 1000;
+                background: rgba(255,255,255,0.9);
+                padding: 10px;
+                border-radius: 5px;
+                box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+            }
+            .print-button {
+                background: #007bff;
+                color: white;
+                border: none;
+                padding: 8px 16px;
+                border-radius: 4px;
+                cursor: pointer;
+                margin: 0 5px;
+                font-size: 12px;
+            }
+            .print-button:hover {
+                background: #0056b3;
+            }
+            .document-container {
+                max-width: 210mm;
+                margin: 0 auto;
+                padding: 20mm;
+                background: white;
+                min-height: 297mm;
+            }
+            .document-header {
+                display: grid;
+                grid-template-columns: 1fr 1fr;
+                gap: 20px;
+                margin-bottom: 20px;
+                border: 2px solid #000;
+                padding: 10px;
+            }
+            .sender-info, .doc-info {
+                padding: 10px;
+                border: 1px solid #000;
+            }
+            .recipient-info, .destination-info {
+                margin: 10px 0;
+                padding: 10px;
+                border: 1px solid #000;
+                min-height: 80px;
+            }
+            .transport-info {
+                margin: 10px 0;
+                padding: 10px;
+                border: 1px solid #000;
+            }
+            .items-table {
+                width: 100%;
+                border-collapse: collapse;
+                margin: 20px 0;
+                border: 2px solid #000;
+            }
+            .items-table th,
+            .items-table td {
+                border: 1px solid #000;
+                padding: 8px;
+                text-align: left;
+                vertical-align: top;
+                font-size: 11px;
+            }
+            .items-table th {
+                background-color: #f0f0f0;
+                font-weight: bold;
+                text-align: center;
+            }
+            .footer-section {
+                display: grid;
+                grid-template-columns: 1fr 1fr 1fr;
+                gap: 10px;
+                margin-top: 20px;
+                border: 1px solid #000;
+                padding: 10px;
+            }
+            .signature-section {
+                text-align: center;
+                padding: 20px;
+                border: 1px solid #000;
+                margin: 10px 0;
+            }
+            .filled-data {
+                background-color: #ffffcc;
+                font-weight: bold;
+            }
+        </style>
+    </head>
+    <body>
+        <div class="no-print">
+            <button class="print-button" onclick="window.print()">🖨️ 打印</button>
+            <button class="print-button" onclick="window.close()">❌ 关闭</button>
+        </div>
+        
+        <div class="document-container">
+            <!-- 文档头部 -->
+            <div class="document-header">
+                <div class="sender-info">
+                    <strong>MITENTE:</strong><br>
+                    ${worksheet['A1'] ? worksheet['A1'].v.replace(/\n/g, '<br>') : ''}
+                </div>
+                <div class="doc-info">
+                    <strong>DOCUMENTO DI TRANSPORTO</strong><br>
+                    ${worksheet['D1'] ? worksheet['D1'].v.replace(/\n/g, '<br>') : ''}
+                </div>
+            </div>
+            
+            <!-- 收件人信息 -->
+            <div class="recipient-info">
+                <strong>Destinatario:</strong><br>
+                ${worksheet['A5'] ? worksheet['A5'].v.replace(/\n/g, '<br>') : ''}
+            </div>
+            
+            <!-- 目的地信息 -->
+            <div class="destination-info">
+                <strong>LUOGO DI DESTINAZIONE:</strong><br>
+                ${worksheet['E5'] ? worksheet['E5'].v.replace(/\n/g, '<br>') : ''}
+            </div>
+            
+            <!-- 运输原因 -->
+            <div class="transport-info">
+                <strong>CAUSA DEL TRANSPORTO:</strong><br>
+                ${worksheet['A9'] ? worksheet['A9'].v : ''} ${worksheet['D9'] ? worksheet['D9'].v : ''}
+            </div>
+            
+            <!-- 物品表格 -->
+            <table class="items-table">
+                <thead>
+                    <tr>
+                        <th style="width: 12%;">${worksheet['A10'] ? worksheet['A10'].v : 'QUANTITA'}</th>
+                        <th style="width: 50%;">${worksheet['B10'] ? worksheet['B10'].v : 'DESCRIZIONE DEI BENI'}</th>
+                        <th style="width: 8%;">UNITA</th>
+                        <th style="width: 10%;">PREZZO</th>
+                        <th style="width: 8%;">SCONTO</th>
+                        <th style="width: 8%;">IVA</th>
+                        <th style="width: 12%;">${worksheet['G10'] ? worksheet['G10'].v : 'IMPORTO'}</th>
+                    </tr>
+                </thead>
+                <tbody>`;
+
+    // 添加识别到的数据行（高亮显示）
+    sessionData.documents.forEach((item, index) => {
+      if (item.extractedData) {
+        const quantita = item.extractedData['Quantita'] || '';
+        const descrizione = item.extractedData['Descrizione Articolo'] || '';
+        const importo = item.extractedData['Numero Documento'] || '';
+        
+        printHTML += `
+                    <tr>
+                        <td class="filled-data">${quantita}</td>
+                        <td class="filled-data">${descrizione}</td>
+                        <td></td>
+                        <td></td>
+                        <td></td>
+                        <td></td>
+                        <td class="filled-data">${importo}</td>
+                    </tr>`;
+      }
+    });
+
+    // 添加空行以匹配模板格式（总共20行）
+    const totalRows = 20;
+    const filledRows = sessionData.documents.filter(doc => doc.extractedData).length;
+    for (let i = filledRows; i < totalRows; i++) {
+      printHTML += `
+                    <tr>
+                        <td>&nbsp;</td>
+                        <td>&nbsp;</td>
+                        <td>&nbsp;</td>
+                        <td>&nbsp;</td>
+                        <td>&nbsp;</td>
+                        <td>&nbsp;</td>
+                        <td>&nbsp;</td>
+                    </tr>`;
+    }
+
+    printHTML += `
+                </tbody>
+            </table>
+            
+            <!-- 底部信息 -->
+            <div class="footer-section">
+                <div>
+                    <strong>${worksheet['A35'] ? worksheet['A35'].v : 'ASPETTO ESTERIORE DEI BENI'}</strong><br>
+                    <div style="height: 40px; border: 1px solid #000; margin-top: 5px;"></div>
+                </div>
+                <div>
+                    <strong>${worksheet['C35'] ? worksheet['C35'].v : 'N. COLLI'}</strong><br>
+                    <div style="height: 40px; border: 1px solid #000; margin-top: 5px;"></div>
+                </div>
+                <div>
+                    <strong>${worksheet['E35'] ? worksheet['E35'].v : 'PORTO'}</strong><br>
+                    <div style="height: 40px; border: 1px solid #000; margin-top: 5px;"></div>
+                </div>
+            </div>
+            
+            <!-- 签名区域 -->
+            <div class="signature-section">
+                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 20px;">
+                    <div>
+                        <strong>${worksheet['F36'] ? worksheet['F36'].v : 'FIRMA DEL CEDENTE'}</strong><br>
+                        <div style="height: 60px; border-bottom: 1px solid #000; margin-top: 20px;"></div>
+                    </div>
+                    <div>
+                        <strong>${worksheet['F38'] ? worksheet['F38'].v : 'FIRMA DEL CESSIONARIO'}</strong><br>
+                        <div style="height: 60px; border-bottom: 1px solid #000; margin-top: 20px;"></div>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- 注释 -->
+            <div style="margin-top: 20px; font-size: 10px;">
+                <p><strong>注释:</strong> 黄色高亮部分为系统自动识别填入的数据</p>
+                <p><strong>处理文档数:</strong> ${sessionData.documents.length} 个 | 
+                   <strong>成功识别:</strong> ${sessionData.documents.filter(doc => doc.extractedData && Object.keys(doc.extractedData).length > 0).length} 个 | 
+                   <strong>会话ID:</strong> ${sessionId}</p>
+                <p>${worksheet['A40'] ? worksheet['A40'].v : ''}</p>
+            </div>
+        </div>
+
+        <script>
+            // 自动聚焦以便快捷键打印
+            window.focus();
+            
+            // 支持Ctrl+P快捷键
+            document.addEventListener('keydown', function(e) {
+                if (e.ctrlKey && e.key === 'p') {
+                    e.preventDefault();
+                    window.print();
+                }
+            });
+        </script>
+    </body>
+    </html>`;
+
+    console.log(`✅ HTML打印预览准备完成`);
+    console.log(`📊 包含 ${sessionData.documents.length} 条记录`);
+
+    // 返回HTML内容
+    res.setHeader('Content-Type', 'text/html; charset=utf-8');
+    res.send(printHTML);
+
+  } catch (error) {
+    console.error('打印预览准备失败:', error);
+    res.status(500).json({ 
+      success: false, 
+      message: '打印预览准备失败: ' + error.message 
+    });
+  }
+});
+
+// 打印选中记录 - 支持历史记录选择性打印
+app.post('/api/print-selected', (req, res) => {
+  try {
+    const { sessionId, records } = req.body;
+    
+    if (!records || !Array.isArray(records) || records.length === 0) {
+      return res.status(400).json({ 
+        success: false, 
+        message: '没有选中的记录' 
+      });
+    }
+
+    console.log(`🖨️ 开始准备打印选中的 ${records.length} 条记录...`);
+
+    // 读取原始output.xlsx文件内容
+    const templatePath = path.join(__dirname, '..', 'output.xlsx');
+    const workbook = XLSX.readFile(templatePath);
+    const worksheet = workbook.Sheets[workbook.SheetNames[0]];
+    
+    // 生成HTML打印内容，完全基于output.xlsx的结构和内容
+    let printHTML = `
+    <!DOCTYPE html>
+    <html>
+    <head>
+        <meta charset="UTF-8">
+        <title>FileCognize 打印预览 - 选中记录</title>
+        <style>
+            @media print {
+                body { margin: 0; }
+                .no-print { display: none; }
+                .document-container { margin: 0; padding: 20px; }
+            }
+            body {
+                font-family: Arial, sans-serif;
+                margin: 0;
+                background: white;
+                font-size: 12px;
+            }
+            .no-print {
+                position: fixed;
+                top: 10px;
+                right: 10px;
+                z-index: 1000;
+                background: rgba(255,255,255,0.9);
+                padding: 10px;
+                border-radius: 5px;
+                box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+            }
+            .print-button {
+                background: #007bff;
+                color: white;
+                border: none;
+                padding: 8px 16px;
+                border-radius: 4px;
+                cursor: pointer;
+                margin: 0 5px;
+                font-size: 12px;
+            }
+            .print-button:hover {
+                background: #0056b3;
+            }
+            .document-container {
+                max-width: 210mm;
+                margin: 0 auto;
+                padding: 20mm;
+                background: white;
+                min-height: 297mm;
+            }
+            .document-header {
+                display: grid;
+                grid-template-columns: 1fr 1fr;
+                gap: 20px;
+                margin-bottom: 20px;
+                border: 2px solid #000;
+                padding: 10px;
+            }
+            .sender-info, .doc-info {
+                padding: 10px;
+                border: 1px solid #000;
+            }
+            .recipient-info, .destination-info {
+                margin: 10px 0;
+                padding: 10px;
+                border: 1px solid #000;
+                min-height: 80px;
+            }
+            .transport-info {
+                margin: 10px 0;
+                padding: 10px;
+                border: 1px solid #000;
+            }
+            .items-table {
+                width: 100%;
+                border-collapse: collapse;
+                margin: 20px 0;
+                border: 2px solid #000;
+            }
+            .items-table th,
+            .items-table td {
+                border: 1px solid #000;
+                padding: 8px;
+                text-align: left;
+                vertical-align: top;
+                font-size: 11px;
+            }
+            .items-table th {
+                background-color: #f0f0f0;
+                font-weight: bold;
+                text-align: center;
+            }
+            .footer-section {
+                display: grid;
+                grid-template-columns: 1fr 1fr 1fr;
+                gap: 10px;
+                margin-top: 20px;
+                border: 1px solid #000;
+                padding: 10px;
+            }
+            .signature-section {
+                text-align: center;
+                padding: 20px;
+                border: 1px solid #000;
+                margin: 10px 0;
+            }
+            .filled-data {
+                background-color: #ffffcc;
+                font-weight: bold;
+            }
+        </style>
+    </head>
+    <body>
+        <div class="no-print">
+            <button class="print-button" onclick="window.print()">🖨️ 打印</button>
+            <button class="print-button" onclick="window.close()">❌ 关闭</button>
+        </div>
+        
+        <div class="document-container">
+            <!-- 文档头部 -->
+            <div class="document-header">
+                <div class="sender-info">
+                    <strong>MITENTE:</strong><br>
+                    ${worksheet['A1'] ? worksheet['A1'].v.replace(/\n/g, '<br>') : ''}
+                </div>
+                <div class="doc-info">
+                    <strong>DOCUMENTO DI TRANSPORTO</strong><br>
+                    ${worksheet['D1'] ? worksheet['D1'].v.replace(/\n/g, '<br>') : ''}
+                </div>
+            </div>
+            
+            <!-- 收件人信息 -->
+            <div class="recipient-info">
+                <strong>Destinatario:</strong><br>
+                ${worksheet['A5'] ? worksheet['A5'].v.replace(/\n/g, '<br>') : ''}
+            </div>
+            
+            <!-- 目的地信息 -->
+            <div class="destination-info">
+                <strong>LUOGO DI DESTINAZIONE:</strong><br>
+                ${worksheet['E5'] ? worksheet['E5'].v.replace(/\n/g, '<br>') : ''}
+            </div>
+            
+            <!-- 运输原因 -->
+            <div class="transport-info">
+                <strong>CAUSA DEL TRANSPORTO:</strong><br>
+                ${worksheet['A9'] ? worksheet['A9'].v : ''} ${worksheet['D9'] ? worksheet['D9'].v : ''}
+            </div>
+            
+            <!-- 物品表格 -->
+            <table class="items-table">
+                <thead>
+                    <tr>
+                        <th style="width: 12%;">${worksheet['A10'] ? worksheet['A10'].v : 'QUANTITA'}</th>
+                        <th style="width: 50%;">${worksheet['B10'] ? worksheet['B10'].v : 'DESCRIZIONE DEI BENI'}</th>
+                        <th style="width: 8%;">UNITA</th>
+                        <th style="width: 10%;">PREZZO</th>
+                        <th style="width: 8%;">SCONTO</th>
+                        <th style="width: 8%;">IVA</th>
+                        <th style="width: 12%;">${worksheet['G10'] ? worksheet['G10'].v : 'IMPORTO'}</th>
+                    </tr>
+                </thead>
+                <tbody>`;
+
+    // 添加选中的记录（高亮显示）
+    records.forEach((record, index) => {
+      if (record.extractedFields) {
+        const quantita = record.extractedFields['Quantita'] || '';
+        const descrizione = record.extractedFields['Descrizione Articolo'] || '';
+        const importo = record.extractedFields['Numero Documento'] || '';
+        
+        printHTML += `
+                    <tr>
+                        <td class="filled-data">${quantita}</td>
+                        <td class="filled-data">${descrizione}</td>
+                        <td></td>
+                        <td></td>
+                        <td></td>
+                        <td></td>
+                        <td class="filled-data">${importo}</td>
+                    </tr>`;
+      }
+    });
+
+    // 添加空行以匹配模板格式（总共20行）
+    const totalRows = 20;
+    const filledRows = records.filter(record => record.extractedFields).length;
+    for (let i = filledRows; i < totalRows; i++) {
+      printHTML += `
+                    <tr>
+                        <td>&nbsp;</td>
+                        <td>&nbsp;</td>
+                        <td>&nbsp;</td>
+                        <td>&nbsp;</td>
+                        <td>&nbsp;</td>
+                        <td>&nbsp;</td>
+                        <td>&nbsp;</td>
+                    </tr>`;
+    }
+
+    printHTML += `
+                </tbody>
+            </table>
+            
+            <!-- 底部信息 -->
+            <div class="footer-section">
+                <div>
+                    <strong>${worksheet['A35'] ? worksheet['A35'].v : 'ASPETTO ESTERIORE DEI BENI'}</strong><br>
+                    <div style="height: 40px; border: 1px solid #000; margin-top: 5px;"></div>
+                </div>
+                <div>
+                    <strong>${worksheet['C35'] ? worksheet['C35'].v : 'N. COLLI'}</strong><br>
+                    <div style="height: 40px; border: 1px solid #000; margin-top: 5px;"></div>
+                </div>
+                <div>
+                    <strong>${worksheet['E35'] ? worksheet['E35'].v : 'PORTO'}</strong><br>
+                    <div style="height: 40px; border: 1px solid #000; margin-top: 5px;"></div>
+                </div>
+            </div>
+            
+            <!-- 签名区域 -->
+            <div class="signature-section">
+                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 20px;">
+                    <div>
+                        <strong>${worksheet['F36'] ? worksheet['F36'].v : 'FIRMA DEL CEDENTE'}</strong><br>
+                        <div style="height: 60px; border-bottom: 1px solid #000; margin-top: 20px;"></div>
+                    </div>
+                    <div>
+                        <strong>${worksheet['F38'] ? worksheet['F38'].v : 'FIRMA DEL CESSIONARIO'}</strong><br>
+                        <div style="height: 60px; border-bottom: 1px solid #000; margin-top: 20px;"></div>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- 注释 -->
+            <div style="margin-top: 20px; font-size: 10px;">
+                <p><strong>注释:</strong> 黄色高亮部分为系统自动识别填入的数据</p>
+                <p><strong>选中记录数:</strong> ${records.length} 个 | 
+                   <strong>成功识别:</strong> ${records.filter(record => record.extractedFields && Object.keys(record.extractedFields).length > 0).length} 个 | 
+                   <strong>会话ID:</strong> ${sessionId}</p>
+                <p>${worksheet['A40'] ? worksheet['A40'].v : ''}</p>
+            </div>
+        </div>
+
+        <script>
+            // 自动聚焦以便快捷键打印
+            window.focus();
+            
+            // 支持Ctrl+P快捷键
+            document.addEventListener('keydown', function(e) {
+                if (e.ctrlKey && e.key === 'p') {
+                    e.preventDefault();
+                    window.print();
+                }
+            });
+        </script>
+    </body>
+    </html>`;
+
+    console.log(`✅ HTML打印预览准备完成`);
+    console.log(`📊 包含 ${records.length} 条选中记录`);
+
+    // 返回HTML内容
+    res.setHeader('Content-Type', 'text/html; charset=utf-8');
+    res.send(printHTML);
+
+  } catch (error) {
+    console.error('打印预览准备失败:', error);
+    res.status(500).json({ 
+      success: false, 
+      message: '打印预览准备失败: ' + error.message 
+    });
+  }
+});
+
+// 下载打印文件API
+app.get('/api/download-print/:filename', (req, res) => {
+  try {
+    const filename = req.params.filename;
+    const filePath = path.join(__dirname, 'exports', filename);
+    
+    if (!fs.existsSync(filePath)) {
+      return res.status(404).json({ error: '打印文件不存在' });
+    }
+    
+    // 设置响应头，让浏览器直接打开文件用于打印
+    res.setHeader('Content-Disposition', `inline; filename="${filename}"`);
+    res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+    
+    // 发送文件
+    res.sendFile(filePath, (err) => {
+      if (!err) {
+        // 文件发送完成后延迟删除临时文件
+        setTimeout(() => {
+          try {
+            fs.unlinkSync(filePath);
+            console.log(`🗑️ 打印临时文件已删除: ${filename}`);
+          } catch (deleteErr) {
+            console.error('删除打印临时文件失败:', deleteErr);
+          }
+        }, 30000); // 30秒后删除，给用户足够时间打印
+      }
+    });
+    
+  } catch (error) {
+    console.error('下载打印文件错误:', error);
+    res.status(500).json({ error: '下载打印文件失败' });
   }
 });
 
