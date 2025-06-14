@@ -8,8 +8,38 @@ const fs = require('fs');
 const pdfParse = require('pdf-parse');
 // pdf-to-img将在需要时动态导入
 const XLSX = require('xlsx');
-const ocrService = require('./ocr-service');
+const { ocrService, DESCRIZIONE_OPTIONS } = require('./ocr-service');
 require('dotenv').config();
+
+// 全局错误处理 - 防止进程崩溃
+process.on('uncaughtException', (error) => {
+  console.error('❌ 未捕获的异常:', error.message);
+  console.error('堆栈:', error.stack);
+  console.error('时间:', new Date().toISOString());
+  
+  // 如果是Tesseract.js相关错误，记录详细信息
+  if (error.message.includes('SetImageFile') || error.message.includes('tesseract')) {
+    console.error('🔍 检测到Tesseract.js相关错误');
+    console.error('错误类型:', error.constructor.name);
+    console.error('错误代码:', error.code);
+  }
+  
+  // 不退出进程，继续运行
+});
+
+process.on('unhandledRejection', (reason, promise) => {
+  console.error('❌ 未处理的Promise拒绝:', reason);
+  console.error('Promise:', promise);
+  console.error('时间:', new Date().toISOString());
+  
+  // 如果是Tesseract.js相关错误，记录详细信息
+  if (reason && reason.message && (reason.message.includes('SetImageFile') || reason.message.includes('tesseract'))) {
+    console.error('🔍 检测到Tesseract.js相关Promise拒绝');
+    console.error('拒绝原因类型:', reason.constructor.name);
+  }
+  
+  // 不退出进程，继续运行
+});
 
 const app = express();
 const PORT = process.env.PORT || 5000;
@@ -989,19 +1019,8 @@ app.post('/api/ocr-and-process', upload.single('file'), async (req, res) => {
 
     const sessionId = req.query.sessionId;
     
-    // 使用多语言OCR识别
-    const ocrResult = await ocrService.recognizeMultiLanguage(req.file.path);
-    
-    if (!ocrResult.success) {
-      return res.status(500).json({
-        success: false,
-        error: 'OCR识别失败: ' + ocrResult.error
-      });
-    }
-
-    // 分析文本结构并提取数据
-    const structure = analyzeTemplateStructure(ocrResult.text);
-    const processedData = processDefaultTemplate(structure.extractedData);
+    // 使用新的固定区域OCR识别
+    const extractedData = await ocrService.recognizeDocument(req.file.path);
     
     // 如果提供了sessionId，添加到会话中
     if (sessionId) {
@@ -1018,9 +1037,7 @@ app.post('/api/ocr-and-process', upload.single('file'), async (req, res) => {
       }
       
       global.documentSessions[sessionId].documents.push({
-        extractedData: structure.extractedData,
-        processedData: processedData,
-        ocrResult: ocrResult,
+        extractedData: extractedData,
         filename: req.file.originalname,
         addedAt: new Date()
       });
@@ -1035,17 +1052,10 @@ app.post('/api/ocr-and-process', upload.single('file'), async (req, res) => {
       }
     }, 5 * 60 * 1000);
 
-    // 只返回提取的三个字段，简化输出
-    const simplifiedResult = {
-      'Numero Documento': structure.extractedData['Numero Documento'] || '',
-      'Quantita': structure.extractedData['Quantita'] || '',
-      'Descrizione Articolo': structure.extractedData['Descrizione Articolo'] || ''
-    };
-
     res.json({
       success: true,
-      message: 'OCR识别完成，提取到3个字段',
-      extractedFields: simplifiedResult,
+      message: `OCR识别完成，提取到${Object.keys(extractedData).length}个字段`,
+      extractedFields: extractedData,
       mapping: {
         'Numero Documento': 'IMPORTO列 (G列)',
         'Quantita': 'QUANTITA列 (A列)', 
@@ -1068,28 +1078,29 @@ app.post('/api/ocr-and-process', upload.single('file'), async (req, res) => {
 app.post('/api/pdf-ocr-and-process', upload.single('file'), async (req, res) => {
   try {
     if (!req.file) {
-      return res.status(400).json({ error: '没有上传PDF文件' });
+      return res.status(400).json({ error: '没有上传文件' });
     }
 
-    console.log('开始PDF OCR识别并处理:', req.file.originalname);
+    console.log('开始OCR识别并处理:', req.file.originalname);
     
-    // 检查文件类型
-    if (req.file.mimetype !== 'application/pdf') {
-      return res.status(400).json({ error: '只支持PDF文件' });
+    // 检查文件类型 - 支持PDF和图片文件
+    const supportedTypes = ['application/pdf', 'image/jpeg', 'image/jpg', 'image/png'];
+    if (!supportedTypes.includes(req.file.mimetype)) {
+      return res.status(400).json({ error: '只支持PDF、JPG、PNG文件' });
     }
 
     const sessionId = req.query.sessionId;
     
-    // 读取PDF文件并提取文本
-    const pdfBuffer = fs.readFileSync(req.file.path);
-    const pdfData = await pdfParse(pdfBuffer);
-    
-    console.log('PDF文本提取完成，文本长度:', pdfData.text.length);
-    
-    let finalText = pdfData.text;
-    
-    // 如果PDF文本提取结果很少（可能是扫描版PDF），使用OCR
-    if (pdfData.text.length < 50) {
+    // 处理不同文件类型
+    if (req.file.mimetype === 'application/pdf') {
+      // PDF文件处理
+      const pdfBuffer = fs.readFileSync(req.file.path);
+      const pdfData = await pdfParse(pdfBuffer);
+      
+      console.log('PDF文本提取完成，文本长度:', pdfData.text.length);
+      
+      // 如果PDF文本提取结果很少（可能是扫描版PDF），使用OCR
+      if (pdfData.text.length < 50) {
       console.log('PDF文本内容较少，可能是扫描版PDF，尝试OCR识别...');
       
       try {
@@ -1118,83 +1129,139 @@ app.post('/api/pdf-ocr-and-process', upload.single('file'), async (req, res) => 
             throw new Error('临时图片文件创建失败');
           }
           
-          // 使用OCR识别图片
-          const ocrResult = await ocrService.recognizeMultiLanguage(tempImagePath);
+          // 使用新的固定区域OCR识别图片
+          const extractedData = await ocrService.recognizeDocument(tempImagePath);
           
-          if (ocrResult.success && ocrResult.text.length > finalText.length) {
-            finalText = ocrResult.text;
-            console.log('OCR识别成功，文本长度:', finalText.length);
+          if (Object.keys(extractedData).length > 0) {
+            console.log('OCR识别成功，提取到字段:', Object.keys(extractedData));
+            
+            // 如果提供了sessionId，直接添加到会话中
+            if (sessionId) {
+              if (!global.documentSessions) {
+                global.documentSessions = {};
+              }
+              
+              if (!global.documentSessions[sessionId]) {
+                global.documentSessions[sessionId] = {
+                  documents: [],
+                  createdAt: new Date(),
+                  lastUpdated: new Date()
+                };
+              }
+              
+              global.documentSessions[sessionId].documents.push({
+                extractedData: extractedData,
+                filename: req.file.originalname,
+                addedAt: new Date()
+              });
+              
+              global.documentSessions[sessionId].lastUpdated = new Date();
+            }
+
+            // 清理临时图片文件
+            setTimeout(() => {
+              if (fs.existsSync(tempImagePath)) {
+                fs.unlinkSync(tempImagePath);
+              }
+            }, 1000);
+
+            // 清理PDF文件
+            setTimeout(() => {
+              if (fs.existsSync(req.file.path)) {
+                fs.unlinkSync(req.file.path);
+              }
+            }, 5 * 60 * 1000);
+
+            // 返回标准格式的数据
+            return res.json({
+              'Numero Documento': extractedData['Numero Documento'] || 'N/A',
+              'Quantita': extractedData['Quantita'] || 'N/A',
+              'Descrizione Articolo': extractedData['Descrizione Articolo'] || 'N/A'
+            });
           }
           
-          // 清理临时图片文件
-          setTimeout(() => {
-            if (fs.existsSync(tempImagePath)) {
-              fs.unlinkSync(tempImagePath);
-            }
-          }, 1000);
+        } else {
+          console.log('PDF转图片失败，使用原始PDF文本');
         }
       } catch (ocrError) {
         console.error('PDF OCR处理失败:', ocrError);
-        // 继续使用原始PDF文本
+        // 如果OCR失败，返回错误
+        return res.status(500).json({
+          success: false,
+          error: 'PDF OCR处理失败: ' + ocrError.message
+        });
+      }
+      } else {
+        // PDF文本内容足够，但我们仍然需要使用固定区域识别
+        console.log('PDF文本内容充足，但仍需要结构化提取');
+        return res.status(400).json({
+          success: false,
+          error: 'PDF文件包含文本但需要图像OCR处理，请转换为图片格式后上传'
+        });
+      }
+    } else {
+      // 图片文件直接处理
+      console.log('处理图片文件:', req.file.originalname);
+      
+      try {
+        // 直接使用OCR识别图片
+        const extractedData = await ocrService.recognizeDocument(req.file.path);
+        
+        if (Object.keys(extractedData).length > 0) {
+          console.log('图片OCR识别成功，提取到字段:', Object.keys(extractedData));
+          
+          // 如果提供了sessionId，直接添加到会话中
+          if (sessionId) {
+            if (!global.documentSessions) {
+              global.documentSessions = {};
+            }
+            
+            if (!global.documentSessions[sessionId]) {
+              global.documentSessions[sessionId] = {
+                documents: [],
+                createdAt: new Date(),
+                lastUpdated: new Date()
+              };
+            }
+            
+            global.documentSessions[sessionId].documents.push({
+              extractedData: extractedData,
+              filename: req.file.originalname,
+              addedAt: new Date()
+            });
+            
+            global.documentSessions[sessionId].lastUpdated = new Date();
+          }
+
+          // 清理图片文件
+          setTimeout(() => {
+            if (fs.existsSync(req.file.path)) {
+              fs.unlinkSync(req.file.path);
+            }
+          }, 5 * 60 * 1000);
+
+          // 返回标准格式的数据
+          return res.json({
+            'Numero Documento': extractedData['Numero Documento'] || 'N/A',
+            'Quantita': extractedData['Quantita'] || 'N/A',
+            'Descrizione Articolo': extractedData['Descrizione Articolo'] || 'N/A'
+          });
+        } else {
+          return res.json({
+            'Numero Documento': 'N/A',
+            'Quantita': 'N/A',
+            'Descrizione Articolo': 'N/A'
+          });
+        }
+        
+      } catch (ocrError) {
+        console.error('图片OCR处理失败:', ocrError);
+        return res.status(500).json({
+          success: false,
+          error: '图片OCR处理失败: ' + ocrError.message
+        });
       }
     }
-    
-    // 分析文本结构并提取数据
-    const structure = analyzeTemplateStructure(finalText);
-    const processedData = processDefaultTemplate(structure.extractedData);
-    
-    // 如果提供了sessionId，添加到会话中
-    if (sessionId) {
-      if (!global.documentSessions) {
-        global.documentSessions = {};
-      }
-      
-      if (!global.documentSessions[sessionId]) {
-        global.documentSessions[sessionId] = {
-          documents: [],
-          createdAt: new Date(),
-          lastUpdated: new Date()
-        };
-      }
-      
-      global.documentSessions[sessionId].documents.push({
-        extractedData: structure.extractedData,
-        processedData: processedData,
-        pdfText: finalText,
-        originalPdfText: pdfData.text,
-        filename: req.file.originalname,
-        addedAt: new Date()
-      });
-      
-      global.documentSessions[sessionId].lastUpdated = new Date();
-    }
-
-    // 清理临时文件
-    setTimeout(() => {
-      if (fs.existsSync(req.file.path)) {
-        fs.unlinkSync(req.file.path);
-      }
-    }, 5 * 60 * 1000);
-
-    // 只返回提取的三个字段，简化输出
-    const simplifiedResult = {
-      'Numero Documento': structure.extractedData['Numero Documento'] || '',
-      'Quantita': structure.extractedData['Quantita'] || '',
-      'Descrizione Articolo': structure.extractedData['Descrizione Articolo'] || ''
-    };
-
-    res.json({
-      success: true,
-      message: 'PDF识别完成，提取到3个字段',
-      extractedFields: simplifiedResult,
-      mapping: {
-        'Numero Documento': 'IMPORTO列 (G列)',
-        'Quantita': 'QUANTITA列 (A列)', 
-        'Descrizione Articolo': 'DESCRIZIONE DEI BENI列 (B列)'
-      },
-      sessionId: sessionId,
-      filename: req.file.originalname
-    });
 
   } catch (error) {
     console.error('PDF OCR处理API错误:', error);
