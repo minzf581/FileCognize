@@ -224,17 +224,32 @@
         .camera-section {
             margin-top: 20px;
             text-align: center;
+            background: white;
+            padding: 20px;
+            border-radius: 10px;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.1);
         }
         
         .camera-section video {
             width: 100%;
-            max-width: 400px;
+            max-width: 500px;
+            height: auto;
             border-radius: 10px;
             box-shadow: 0 4px 15px rgba(0,0,0,0.2);
+            background: #f0f0f0;
         }
         
         .camera-controls {
-            margin-top: 15px;
+            margin-top: 20px;
+            display: flex;
+            justify-content: center;
+            gap: 15px;
+        }
+        
+        .camera-status {
+            margin-bottom: 15px;
+            color: #666;
+            font-style: italic;
         }
         
         .session-info {
@@ -295,10 +310,11 @@
                     
                     <!-- 相机界面 -->
                     <div class="camera-section" id="cameraSection" style="display: none;">
-                        <video id="cameraVideo" autoplay playsinline></video>
+                        <div class="camera-status" id="cameraStatus">正在启动相机...</div>
+                        <video id="cameraVideo" autoplay playsinline muted></video>
                         <div class="camera-controls">
                             <button class="capture-btn" onclick="capturePhoto()">📸 拍照</button>
-                            <button class="close-camera-btn" onclick="closeCamera()">❌ 关闭</button>
+                            <button class="close-camera-btn" onclick="closeCamera()">❌ 关闭相机</button>
                         </div>
                         <canvas id="captureCanvas" style="display: none;"></canvas>
                     </div>
@@ -528,16 +544,57 @@
         // 相机功能
         async function openCamera() {
             try {
+                console.log('正在启动相机...');
+                
+                // 显示相机界面
+                cameraSection.style.display = 'block';
+                document.querySelector('.upload-buttons').style.display = 'none';
+                document.querySelector('h3').textContent = '📷 相机拍照';
+                document.querySelector('p').textContent = '对准文档，点击拍照按钮';
+                
+                const cameraStatus = document.getElementById('cameraStatus');
+                cameraStatus.textContent = '正在启动相机...';
+                
                 cameraStream = await navigator.mediaDevices.getUserMedia({ 
                     video: { 
-                        facingMode: 'environment' // 优先使用后置摄像头
+                        facingMode: 'environment', // 优先使用后置摄像头
+                        width: { ideal: 1280 },
+                        height: { ideal: 720 }
                     } 
                 });
+                
+                console.log('相机启动成功');
                 cameraVideo.srcObject = cameraStream;
-                cameraSection.style.display = 'block';
-                uploadArea.style.display = 'none';
+                
+                // 等待视频开始播放
+                cameraVideo.onloadedmetadata = () => {
+                    console.log('视频元数据加载完成');
+                    cameraStatus.textContent = '相机已就绪，对准文档点击拍照';
+                };
+                
+                cameraVideo.onplaying = () => {
+                    console.log('视频开始播放');
+                    cameraStatus.style.display = 'none';
+                };
+                
             } catch (error) {
-                showError('无法访问摄像头，请检查权限设置');
+                console.error('相机启动失败:', error);
+                const cameraStatus = document.getElementById('cameraStatus');
+                cameraStatus.textContent = '相机启动失败';
+                
+                let errorMessage = '无法访问摄像头';
+                if (error.name === 'NotAllowedError') {
+                    errorMessage = '请允许访问摄像头权限';
+                } else if (error.name === 'NotFoundError') {
+                    errorMessage = '未找到摄像头设备';
+                } else if (error.name === 'NotSupportedError') {
+                    errorMessage = '浏览器不支持摄像头功能';
+                } else if (location.protocol !== 'https:' && location.hostname !== 'localhost') {
+                    errorMessage = '请使用HTTPS访问或在localhost测试';
+                }
+                
+                showError(errorMessage);
+                closeCamera();
             }
         }
 
@@ -547,7 +604,15 @@
                 cameraStream = null;
             }
             cameraSection.style.display = 'none';
-            uploadArea.style.display = 'block';
+            // 恢复原始界面
+            document.querySelector('.upload-buttons').style.display = 'flex';
+            document.querySelector('h3').textContent = '📁 上传文档';
+            document.querySelector('p').textContent = '支持图片和PDF文件，点击选择文件或拖拽到此处';
+            
+            // 重置相机状态
+            const cameraStatus = document.getElementById('cameraStatus');
+            cameraStatus.style.display = 'block';
+            cameraStatus.textContent = '正在启动相机...';
         }
 
         function capturePhoto() {

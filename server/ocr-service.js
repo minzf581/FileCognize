@@ -155,17 +155,19 @@ i | Fr STE ET A TE RE ET os RTI | —
 // 创建单例实例
 const ocrService = new OCRService();
 
-// 优雅关闭
-process.on('SIGINT', async () => {
-  console.log('正在关闭OCR服务...');
-  await ocrService.terminate();
-  process.exit(0);
-});
+// 优雅关闭 - 仅在非生产环境中注册信号处理器
+if (process.env.NODE_ENV !== 'production') {
+  process.on('SIGINT', async () => {
+    console.log('正在关闭OCR服务...');
+    await ocrService.terminate();
+    process.exit(0);
+  });
 
-process.on('SIGTERM', async () => {
-  console.log('正在关闭OCR服务...');
-  await ocrService.terminate();
-  process.exit(0);
-});
+  process.on('SIGTERM', async () => {
+    console.log('正在关闭OCR服务...');
+    await ocrService.terminate();
+    process.exit(0);
+  });
+}
 
 module.exports = ocrService; 
