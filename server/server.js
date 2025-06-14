@@ -1207,36 +1207,52 @@ app.get('/api/health', (req, res) => {
   res.json({ status: 'OK', timestamp: new Date().toISOString() });
 });
 
-// 生产环境下提供静态文件
+// 生产环境下提供静态文件 - 优先使用新的前端页面
 if (process.env.NODE_ENV === 'production') {
-  // 尝试多个可能的构建文件位置
-  const buildPaths = [
-    path.join(__dirname, '../build'),        // 根目录的build文件夹
-    path.join(__dirname, '../client/build')  // client目录的build文件夹
-  ];
+  // 优先检查public目录的新前端页面
+  const publicPath = path.join(__dirname, '../public');
+  const publicIndexPath = path.join(publicPath, 'index.html');
   
-  let buildPath = null;
-  for (const testPath of buildPaths) {
-    if (fs.existsSync(path.join(testPath, 'index.html'))) {
-      buildPath = testPath;
-      console.log(`找到构建文件在: ${buildPath}`);
-      break;
-    }
-  }
-  
-  if (buildPath) {
-    app.use(express.static(buildPath));
+  if (fs.existsSync(publicIndexPath)) {
+    console.log(`✅ 使用新的前端页面: ${publicPath}`);
     
+    // 为所有路由返回新的前端页面
     app.get('*', (req, res) => {
-      res.sendFile(path.join(buildPath, 'index.html'));
+      // 如果是API请求，跳过
+      if (req.path.startsWith('/api/')) {
+        return res.status(404).json({ error: '接口不存在' });
+      }
+      res.sendFile(publicIndexPath);
     });
   } else {
-    console.error('未找到构建文件，检查以下路径:');
-    buildPaths.forEach(p => console.error(`- ${p}`));
+    // 回退到旧的构建文件
+    const buildPaths = [
+      path.join(__dirname, '../build'),        // 根目录的build文件夹
+      path.join(__dirname, '../client/build')  // client目录的build文件夹
+    ];
     
-    app.get('*', (req, res) => {
-      res.status(404).json({ error: '前端文件未找到，请检查构建配置' });
-    });
+    let buildPath = null;
+    for (const testPath of buildPaths) {
+      if (fs.existsSync(path.join(testPath, 'index.html'))) {
+        buildPath = testPath;
+        console.log(`⚠️ 回退到旧构建文件: ${buildPath}`);
+        break;
+      }
+    }
+    
+    if (buildPath) {
+      app.use(express.static(buildPath));
+      
+      app.get('*', (req, res) => {
+        res.sendFile(path.join(buildPath, 'index.html'));
+      });
+    } else {
+      console.error('❌ 未找到任何前端文件');
+      
+      app.get('*', (req, res) => {
+        res.status(404).json({ error: '前端文件未找到，请检查构建配置' });
+      });
+    }
   }
 }
 
