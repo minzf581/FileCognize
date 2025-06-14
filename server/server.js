@@ -1101,10 +1101,15 @@ app.post('/api/pdf-ocr-and-process', upload.single('file'), async (req, res) => 
           const firstPageBuffer = await pdfDocument.getPage(1);
           
           // 将buffer保存为临时图片文件
-          const tempImagePath = req.file.path.replace('.pdf', '_page1.png');
+          const tempImagePath = req.file.path.replace(/\.[^.]+$/, '_page1.png');
           fs.writeFileSync(tempImagePath, firstPageBuffer);
           
           console.log('PDF转图片成功，开始OCR识别:', tempImagePath);
+          
+          // 确保图片文件存在
+          if (!fs.existsSync(tempImagePath)) {
+            throw new Error('临时图片文件创建失败');
+          }
           
           // 使用OCR识别图片
           const ocrResult = await ocrService.recognizeMultiLanguage(tempImagePath);

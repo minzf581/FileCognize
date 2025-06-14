@@ -1,0 +1,12 @@
+FileCognize服务信息
+==================
+启动时间: 2025年 6月14日 星期六 20时02分49秒 +08
+进程ID: 36309
+端口: 3001
+访问地址: http://localhost:3001
+日志文件: server.log
+
+停止服务命令:
+kill 36309
+或
+pkill -f 'node server/server.js'
