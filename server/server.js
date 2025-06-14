@@ -785,6 +785,30 @@ app.get('/api/sessions', (req, res) => {
   }
 });
 
+// 获取特定会话数据API
+app.get('/api/sessions/:sessionId', (req, res) => {
+  try {
+    const sessionId = req.params.sessionId;
+    
+    if (!global.documentSessions || !global.documentSessions[sessionId]) {
+      return res.status(404).json({ error: '会话不存在' });
+    }
+    
+    const sessionData = global.documentSessions[sessionId];
+    
+    res.json({
+      sessionId: sessionId,
+      documents: sessionData.documents,
+      createdAt: sessionData.createdAt,
+      lastUpdated: sessionData.lastUpdated
+    });
+    
+  } catch (error) {
+    console.error('获取会话数据错误:', error);
+    res.status(500).json({ error: '获取会话数据失败' });
+  }
+});
+
 // 删除会话API
 app.delete('/api/session/:sessionId', (req, res) => {
   try {
