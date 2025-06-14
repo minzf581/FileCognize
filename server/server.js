@@ -64,6 +64,7 @@ function analyzeTemplateStructure(text) {
     // 1. 提取Numero Documento (录单号) - 写入IMPORTO列
     console.log('提取Numero Documento...');
     const numeroPatterns = [
+      /\|\s*([0-9]+\/[a-zA-Z]+)\s*\|\s*[0-9]{2}\/[0-9]{2}\/[0-9]{4}/i, // | 549/s | 10/03/2025 格式
       /\[01107\s*\|\s*([^|\s]+\/[^|\s]+)\s*\|/i,   // 匹配 [01107 | 549/s | 格式
       /\|\s*([0-9]+\/[a-zA-Z]+)\s*\|\s*[0-9]/i,   // 匹配 | 549/s | 日期 格式
       /\|\s*\d+\s*\|\s*([^|\s]+\/[^|\s]+)\s*\|/i, // 匹配表格中的 | 数字 | 549/s | 格式
@@ -80,63 +81,69 @@ function analyzeTemplateStructure(text) {
       }
     }
 
-    // 2. 提取Quantità (长度) - 写入QUANTITA列
+    // 2. 提取Quantità (数量) - 写入QUANTITA列
     console.log('提取Quantita...');
     const quantitaPatterns = [
-      /MT\s*\|\s*([0-9]+[,.]?[0-9]*)\s*\|/i,        // MT | 105,00 | 格式
+      /VARIE\s+MISURE\s+PZ\s+[0-9]+\s+MT\s*["|']\s*([0-9]+[,.]?[0-9]*)\s*["|']/i, // VARIE MISURE PZ 246 MT " 105,00 '
+      /MT\s*["|']\s*([0-9]+[,.]?[0-9]*)\s*["|']/i,        // MT " 105,00 '
+      /PZ\s+[0-9]+\s+MT\s*["|']\s*([0-9]+[,.]?[0-9]*)/i,  // PZ 246 MT " 105,00
       /\|\s*([0-9]+[,.]?[0-9]*)\s*\|\s*$/m,         // 行末的数字
       /quantità[:\s]*\|\s*([^|\n]+)\s*\|/i,         // quantità列
-      /VARIE\s+MISURE[^|]*\|\s*([0-9]+[,.]?[0-9]*)\s*\|/i  // VARIE MISURE后的数字
+      /([0-9]+[,.]?[0-9]*)\s*["|']\s*$/m            // 行末带引号的数字
     ];
     
     for (const pattern of quantitaPatterns) {
       const match = text.match(pattern);
-      if (match && match[1] && parseFloat(match[1].replace(',', '.')) > 1) {
-        structure.extractedData['Quantita'] = match[1].trim();
-        console.log('✅ 找到Quantita:', match[1].trim());
-        break;
+      if (match && match[1]) {
+        const value = match[1].trim();
+        const numValue = parseFloat(value.replace(',', '.'));
+        if (numValue > 1) { // 确保是有意义的数量
+          structure.extractedData['Quantita'] = value;
+          console.log('✅ 找到Quantita:', value);
+          break;
+        }
       }
     }
 
     // 3. 提取Descrizione Articolo (加工内容) - 写入DESCRIZIONE DEI BENI列
     console.log('提取Descrizione Articolo...');
     
-    // 四种可能的加工内容
-    const targetDescriptions = [
-      'NS .CERNIERE A SCORCIARE',
-      'CATENA CONTINUA METALLO MONT,BLOCCHETTO VARIE MIS', 
-      'CERNIERE A MONTARE CURSORE',
-      'CERNIERE A MONTARE TIRETTO'
+    // 从真实OCR结果中提取描述
+    const descrizionePatterns = [
+      /METALLOFIS\s+(CATENA\s+CONTINUA\s+METALLO[^"|']*)/i, // METALLOFIS CATENA CONTINUA METALLO...
+      /(CATENA\s+CONTINUA\s+METALLO[^"|']*?)(?:\s+PZ|\s+MT|\s*["|'])/i, // CATENA CONTINUA METALLO... 直到PZ或MT
+      /(NS\s*\.?\s*CERNIERE\s+A\s+SCORCIARE)/i,           // NS .CERNIERE A SCORCIARE
+      /(CERNIERE\s+A\s+MONTARE\s+CURSORE)/i,              // CERNIERE A MONTARE CURSORE
+      /(CERNIERE\s+A\s+MONTARE\s+TIRETTO)/i               // CERNIERE A MONTARE TIRETTO
     ];
 
     let foundDescription = null;
     
-    // 首先尝试精确匹配预定义的描述
-    for (const target of targetDescriptions) {
-      const regex = new RegExp(target.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'i');
-      if (regex.test(text)) {
-        foundDescription = target;
-        console.log('✅ 精确匹配到:', target);
+    for (const pattern of descrizionePatterns) {
+      const match = text.match(pattern);
+      if (match && match[1]) {
+        foundDescription = match[1].trim();
+        console.log('✅ 找到Descrizione Articolo:', foundDescription);
         break;
       }
     }
 
-    // 如果没有精确匹配，尝试模糊匹配关键词
+    // 如果没有找到完整描述，尝试标准化匹配
     if (!foundDescription) {
-      console.log('尝试模糊匹配...');
+      console.log('尝试标准化匹配...');
       
       if (/CATENA.*CONTINUA.*METALLO/i.test(text)) {
         foundDescription = 'CATENA CONTINUA METALLO MONT,BLOCCHETTO VARIE MIS';
-        console.log('✅ 模糊匹配到: CATENA CONTINUA METALLO');
+        console.log('✅ 标准化匹配到: CATENA CONTINUA METALLO');
       } else if (/NS.*CERNIERE.*SCORCIARE/i.test(text)) {
         foundDescription = 'NS .CERNIERE A SCORCIARE';
-        console.log('✅ 模糊匹配到: NS CERNIERE A SCORCIARE');
+        console.log('✅ 标准化匹配到: NS CERNIERE A SCORCIARE');
       } else if (/CERNIERE.*CURSORE/i.test(text)) {
         foundDescription = 'CERNIERE A MONTARE CURSORE';
-        console.log('✅ 模糊匹配到: CERNIERE CURSORE');
+        console.log('✅ 标准化匹配到: CERNIERE CURSORE');
       } else if (/CERNIERE.*TIRETTO/i.test(text)) {
         foundDescription = 'CERNIERE A MONTARE TIRETTO';
-        console.log('✅ 模糊匹配到: CERNIERE TIRETTO');
+        console.log('✅ 标准化匹配到: CERNIERE TIRETTO');
       }
     }
 

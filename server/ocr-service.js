@@ -3,12 +3,12 @@ const path = require('path');
 
 // 尝试导入Tesseract.js，如果失败则使用模拟模式
 let Tesseract;
-let useRealOCR = false; // 暂时禁用真实OCR
+let useRealOCR = false;
 
 try {
   Tesseract = require('tesseract.js');
-  // useRealOCR = true; // 暂时注释掉，强制使用模拟模式
-  console.log('⚠️ Tesseract.js已加载，但当前使用模拟OCR模式');
+  useRealOCR = true; // 启用真实OCR
+  console.log('✅ Tesseract.js已加载，使用真实OCR识别');
 } catch (error) {
   console.log('⚠️ Tesseract.js未安装，使用模拟OCR模式');
   console.log('💡 要启用真实OCR，请运行: npm install tesseract.js');
@@ -27,14 +27,16 @@ class OCRService {
       console.log('正在初始化OCR服务...');
       
       if (useRealOCR) {
-        // 初始化Tesseract.js worker
-        this.worker = await Tesseract.createWorker('ita+eng+chi_sim', 1, {
-          logger: m => {
-            if (m.status === 'recognizing text') {
-              console.log(`OCR识别进度: ${Math.round(m.progress * 100)}%`);
-            }
-          }
-        });
+        // 初始化Tesseract.js worker，使用最简单的配置
+        console.log('🔧 创建Tesseract worker...');
+        this.worker = await Tesseract.createWorker();
+        
+        console.log('🔧 加载语言包...');
+        await this.worker.loadLanguage('ita+eng');
+        
+        console.log('🔧 初始化语言包...');
+        await this.worker.initialize('ita+eng');
+        
         console.log('✅ Tesseract.js OCR服务初始化完成');
       } else {
         // 模拟初始化过程
@@ -70,44 +72,27 @@ class OCRService {
       if (useRealOCR && this.worker) {
         try {
           // 使用真实的Tesseract.js OCR
+          console.log('🔍 开始真实OCR识别...');
           const { data: { text, confidence } } = await this.worker.recognize(imagePath);
           
-          console.log(`✅ OCR识别完成，置信度: ${confidence.toFixed(1)}%`);
+          console.log(`✅ 真实OCR识别完成，置信度: ${confidence.toFixed(1)}%`);
           console.log(`📝 识别文本长度: ${text.length} 字符`);
+          console.log(`📄 识别文本预览: ${text.substring(0, 200)}...`);
           
           return {
             text: text.trim(),
             confidence: confidence,
             success: true,
-            language: 'ita+eng+chi_sim'
+            language: 'ita+eng',
+            isReal: true
           };
         } catch (ocrError) {
-          console.error('Tesseract.js OCR失败，切换到模拟模式:', ocrError);
-          useRealOCR = false;
-          // 继续使用模拟模式
+          console.error('Tesseract.js OCR失败:', ocrError);
+          throw ocrError; // 不再降级到模拟模式，直接抛出错误
         }
+      } else {
+        throw new Error('真实OCR未启用，请检查Tesseract.js安装');
       }
-      
-      // 模拟OCR识别过程
-      await new Promise(resolve => setTimeout(resolve, 2000));
-      
-      // 返回模拟的OCR结果
-      const mockText = `
-      运输单据示例
-      Numero Documento: 12345
-      Quantita: 150cm
-      Descrizione Articolo: NS .CERNIERE A SCORCIARE
-      其他识别的文本内容...
-      `;
-
-      console.log('⚠️ OCR识别完成 (模拟结果)');
-      
-      return {
-        text: mockText.trim(),
-        confidence: 85.5,
-        success: true,
-        note: '这是模拟的OCR结果，要启用真实OCR请安装tesseract.js'
-      };
 
     } catch (error) {
       console.error('OCR识别失败:', error);
@@ -115,7 +100,8 @@ class OCRService {
         text: '',
         confidence: 0,
         success: false,
-        error: error.message
+        error: error.message,
+        isReal: false
       };
     }
   }
@@ -137,61 +123,27 @@ class OCRService {
       if (useRealOCR && this.worker) {
         try {
           // 使用真实的Tesseract.js多语言OCR
+          console.log('🔍 开始真实多语言OCR识别...');
           const { data: { text, confidence } } = await this.worker.recognize(imagePath);
           
-          console.log(`✅ 多语言OCR识别完成，置信度: ${confidence.toFixed(1)}%`);
+          console.log(`✅ 真实多语言OCR识别完成，置信度: ${confidence.toFixed(1)}%`);
           console.log(`📝 识别文本长度: ${text.length} 字符`);
+          console.log(`📄 识别文本预览: ${text.substring(0, 300)}...`);
           
           return {
             text: text.trim(),
             confidence: confidence,
             success: true,
-            language: 'ita+eng+chi_sim'
+            language: 'ita+eng',
+            isReal: true
           };
         } catch (ocrError) {
-          console.error('Tesseract.js多语言OCR失败，切换到模拟模式:', ocrError);
-          useRealOCR = false;
-          // 继续使用模拟模式
+          console.error('Tesseract.js多语言OCR失败:', ocrError);
+          throw ocrError; // 不再降级到模拟模式，直接抛出错误
         }
+      } else {
+        throw new Error('真实OCR未启用，请检查Tesseract.js安装');
       }
-      
-      // 模拟多语言OCR识别过程
-      await new Promise(resolve => setTimeout(resolve, 3000));
-      
-      // 使用真实的OCR结果格式作为模拟数据
-      const mockText = `£ Py
-. » . .
-Meoni & Ciampalini s.p.a.
-. : Spett.
-RAPPRESENTANZE CON DEPOSITO E COMMERCIO CONFEZIONE APOLLO DI CHEN DONGPING
-ACCESSORI PER CONFEZIONE VIA DEL CASTELLUCCIO, 38
-一 PO FI
-50053 EMPOLI (Firenze) - Via Reali, 32/34 Ae Be ire
-Zona Industriale Terrafino
-| edd Ud + Fax 0571.930161
-e-mail: info@meoniciampalini.it - www. ici ini.i i inazi i i
-| Capitale Sociale Euro 200.006 60 meoniciampalini.it Luogo di Destinazione dei Beni
-R.E.A. Firenze 296618
-| Codice Fiscale e Partita Iva 03066330485 ay
-| Reg. Impr. Firenze 03066330485
-| Id. Code: IT 03066330485
-1
-| [i Cliente] Numero Documento Data Documento "Cod. Fisc./Partita Iva ca
-[01107 | 549/s 10/03/2025 07188150481 Documento di Trasporto (0.d.t.) || 1 |
-LCodice Articolo || Descrizione Articolo i Jun) quantità |
-i | Fr STE ET A TE RE ET os RTI | —
-| METALLOFIS CATENA CONTINUA METALLO DA FARE FISSA VARIE MISURE PZ 246 MT | 105,00 |
-05685`;
-
-      console.log('⚠️ 多语言OCR识别完成 (模拟结果)');
-      
-      return {
-        text: mockText.trim(),
-        confidence: 88.2,
-        success: true,
-        language: 'ita+eng+chi_sim',
-        note: '这是模拟的多语言OCR结果，要启用真实OCR请安装tesseract.js'
-      };
 
     } catch (error) {
       console.error('多语言OCR识别失败:', error);
@@ -200,7 +152,8 @@ i | Fr STE ET A TE RE ET os RTI | —
         confidence: 0,
         success: false,
         error: error.message,
-        language: 'ita+eng+chi_sim'
+        language: 'ita+eng',
+        isReal: false
       };
     }
   }
@@ -220,7 +173,7 @@ i | Fr STE ET A TE RE ET os RTI | —
     }
   }
 
-  // 预处理图片（可选）
+  // 预处理图片以提高OCR准确性
   preprocessImage(imagePath, outputPath) {
     // 这里可以添加图片预处理逻辑
     // 比如调整对比度、去噪等
