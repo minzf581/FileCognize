@@ -35,15 +35,9 @@ class OCRService {
                 this.worker = null;
             }
             
-            // 使用最简单的配置创建worker
+            // 使用最简单的配置创建worker (新版本已预加载语言包)
             console.log('🔧 正在创建新的Tesseract worker...');
-            this.worker = await Tesseract.createWorker();
-
-            console.log('🔧 加载意大利语语言包...');
-            await this.worker.loadLanguage('ita');
-            
-            console.log('🔧 初始化意大利语语言包...');
-            await this.worker.initialize('ita');
+            this.worker = await Tesseract.createWorker('ita');
 
             console.log('✅ 意大利语OCR服务初始化完成');
             this.isInitialized = true;

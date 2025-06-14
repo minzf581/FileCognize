@@ -1,12 +1,20 @@
 FileCognize服务信息
 ==================
-启动时间: Sat Jun 14 21:34:52 +08 2025
-进程ID: 74725
+启动时间: Sat Jun 14 21:43:18 +08 2025
+进程ID: 84257
 端口: 3001
 访问地址: http://localhost:3001
 日志文件: server.log
 
 停止服务命令:
-kill 74725
+kill 84257
 或
 pkill -f 'node server/server.js'
+
+查看实时日志:
+tail -f server.log
+或
+./start-services.sh --logs
+
+调试模式:
+./start-services.sh --debug
