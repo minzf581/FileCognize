@@ -6,6 +6,7 @@ const multer = require('multer');
 const path = require('path');
 const fs = require('fs');
 const pdfParse = require('pdf-parse');
+// pdf-to-img将在需要时动态导入
 const XLSX = require('xlsx');
 const ocrService = require('./ocr-service');
 require('dotenv').config();
@@ -1054,8 +1055,56 @@ app.post('/api/pdf-ocr-and-process', upload.single('file'), async (req, res) => 
     
     console.log('PDF文本提取完成，文本长度:', pdfData.text.length);
     
+    let finalText = pdfData.text;
+    
+    // 如果PDF文本提取结果很少（可能是扫描版PDF），使用OCR
+    if (pdfData.text.length < 50) {
+      console.log('PDF文本内容较少，可能是扫描版PDF，尝试OCR识别...');
+      
+      try {
+        // 动态导入pdf-to-img
+        const { pdf } = await import('pdf-to-img');
+        
+        // 将PDF转换为PNG图片
+        const pdfBuffer = fs.readFileSync(req.file.path);
+        const pdfDocument = await pdf(pdfBuffer, {
+          outputType: 'buffer',
+          viewportScale: 2.0
+        });
+        
+        if (pdfDocument && pdfDocument.length > 0) {
+          // 获取第一页
+          const firstPageBuffer = await pdfDocument.getPage(1);
+          
+          // 将buffer保存为临时图片文件
+          const tempImagePath = req.file.path.replace('.pdf', '_page1.png');
+          fs.writeFileSync(tempImagePath, firstPageBuffer);
+          
+          console.log('PDF转图片成功，开始OCR识别:', tempImagePath);
+          
+          // 使用OCR识别图片
+          const ocrResult = await ocrService.recognizeMultiLanguage(tempImagePath);
+          
+          if (ocrResult.success && ocrResult.text.length > finalText.length) {
+            finalText = ocrResult.text;
+            console.log('OCR识别成功，文本长度:', finalText.length);
+          }
+          
+          // 清理临时图片文件
+          setTimeout(() => {
+            if (fs.existsSync(tempImagePath)) {
+              fs.unlinkSync(tempImagePath);
+            }
+          }, 1000);
+        }
+      } catch (ocrError) {
+        console.error('PDF OCR处理失败:', ocrError);
+        // 继续使用原始PDF文本
+      }
+    }
+    
     // 分析文本结构并提取数据
-    const structure = analyzeTemplateStructure(pdfData.text);
+    const structure = analyzeTemplateStructure(finalText);
     const processedData = processDefaultTemplate(structure.extractedData);
     
     // 如果提供了sessionId，添加到会话中
@@ -1075,7 +1124,8 @@ app.post('/api/pdf-ocr-and-process', upload.single('file'), async (req, res) => 
       global.documentSessions[sessionId].documents.push({
         extractedData: structure.extractedData,
         processedData: processedData,
-        pdfText: pdfData.text,
+        pdfText: finalText,
+        originalPdfText: pdfData.text,
         filename: req.file.originalname,
         addedAt: new Date()
       });
