@@ -643,41 +643,44 @@
                 printBtn.disabled = true;
                 printBtn.textContent = '正在准备打印...';
                 
-                updateProgress(20, '正在生成Excel文件...');
+                updateProgress(20, '正在获取数据...');
                 showProgress(true);
 
-                // 获取填入数据的Excel文件
-                const response = await fetch(`/api/export/${currentSessionId}`);
+                // 获取会话数据用于打印预览
+                const response = await fetch(`/api/sessions/${currentSessionId}`);
                 
                 if (!response.ok) {
-                    throw new Error('生成Excel文件失败');
+                    throw new Error('获取数据失败');
                 }
 
-                updateProgress(60, '正在准备打印...');
+                const sessionData = await response.json();
+                updateProgress(60, '正在生成打印预览...');
 
-                const blob = await response.blob();
-                const url = URL.createObjectURL(blob);
+                // 创建打印预览HTML
+                const printContent = generatePrintHTML(sessionData);
                 
-                // 创建一个临时链接来下载文件，然后提示用户打印
-                const a = document.createElement('a');
-                a.href = url;
-                a.download = `FileCognize_Print_${currentSessionId}_${new Date().toISOString().slice(0, 19).replace(/:/g, '-')}.xlsx`;
-                document.body.appendChild(a);
-                a.click();
-                document.body.removeChild(a);
+                // 创建新窗口用于打印
+                const printWindow = window.open('', '_blank');
+                printWindow.document.write(printContent);
+                printWindow.document.close();
                 
-                updateProgress(100, '文件已下载！');
+                updateProgress(100, '打印准备完成！');
                 
                 setTimeout(() => {
                     showProgress(false);
-                    URL.revokeObjectURL(url);
+                    printWindow.print();
                     
-                    // 显示提示消息
-                    const infoMsg = document.createElement('div');
-                    infoMsg.style.cssText = 'position: fixed; top: 20px; right: 20px; background: #2196F3; color: white; padding: 15px; border-radius: 5px; z-index: 1000; max-width: 300px;';
-                    infoMsg.innerHTML = '📥 Excel文件已下载！<br/>💡 请打开文件并使用Excel的打印功能进行打印';
-                    document.body.appendChild(infoMsg);
-                    setTimeout(() => document.body.removeChild(infoMsg), 5000);
+                    // 显示成功消息
+                    const successMsg = document.createElement('div');
+                    successMsg.style.cssText = 'position: fixed; top: 20px; right: 20px; background: #FF9800; color: white; padding: 15px; border-radius: 5px; z-index: 1000;';
+                    successMsg.textContent = '🖨️ 打印预览已打开！';
+                    document.body.appendChild(successMsg);
+                    setTimeout(() => document.body.removeChild(successMsg), 3000);
+                    
+                    // 打印完成后关闭窗口
+                    setTimeout(() => {
+                        printWindow.close();
+                    }, 5000);
                 }, 500);
 
             } catch (error) {
@@ -687,6 +690,168 @@
                 printBtn.disabled = false;
                 printBtn.textContent = '🖨️ 打印文件';
             }
+        }
+
+        // 生成打印HTML内容 - 模拟Excel表格样式
+        function generatePrintHTML(sessionData) {
+            const documents = sessionData.documents || [];
+            const timestamp = new Date().toLocaleString('zh-CN');
+            
+            let tableRows = '';
+            documents.forEach((doc, index) => {
+                const data = doc.extractedData || {};
+                tableRows += `
+                    <tr>
+                        <td class="data-cell">${data['Quantita'] || ''}</td>
+                        <td class="data-cell">${data['Descrizione Articolo'] || ''}</td>
+                        <td class="data-cell"></td>
+                        <td class="data-cell"></td>
+                        <td class="data-cell"></td>
+                        <td class="data-cell"></td>
+                        <td class="data-cell">${data['Numero Documento'] || ''}</td>
+                    </tr>
+                `;
+            });
+
+            return `
+                <!DOCTYPE html>
+                <html>
+                <head>
+                    <meta charset="UTF-8">
+                    <title>FileCognize 打印预览</title>
+                    <style>
+                        @media print {
+                            body { margin: 0; }
+                            .no-print { display: none; }
+                            .print-header { margin-bottom: 20px; }
+                        }
+                        body {
+                            font-family: Arial, sans-serif;
+                            margin: 20px;
+                            line-height: 1.2;
+                            background: white;
+                        }
+                        .print-header {
+                            text-align: center;
+                            margin-bottom: 30px;
+                            border-bottom: 2px solid #333;
+                            padding-bottom: 15px;
+                        }
+                        .print-header h1 {
+                            margin: 0;
+                            color: #333;
+                            font-size: 24px;
+                        }
+                        .print-info {
+                            margin-bottom: 20px;
+                            font-size: 12px;
+                            color: #666;
+                        }
+                        .excel-table {
+                            width: 100%;
+                            border-collapse: collapse;
+                            margin-bottom: 20px;
+                            font-size: 11px;
+                        }
+                        .excel-table th, .excel-table td {
+                            border: 1px solid #000;
+                            padding: 4px 6px;
+                            text-align: left;
+                            vertical-align: middle;
+                            height: 20px;
+                        }
+                        .excel-table th {
+                            background-color: #f0f0f0;
+                            font-weight: bold;
+                            text-align: center;
+                        }
+                        .header-row {
+                            background-color: #e6e6e6;
+                            font-weight: bold;
+                        }
+                        .data-cell {
+                            background-color: white;
+                        }
+                        .empty-row td {
+                            height: 20px;
+                            background-color: white;
+                        }
+                        .print-footer {
+                            margin-top: 30px;
+                            text-align: center;
+                            font-size: 10px;
+                            color: #999;
+                            border-top: 1px solid #ddd;
+                            padding-top: 10px;
+                        }
+                        .no-print {
+                            position: fixed;
+                            top: 10px;
+                            right: 10px;
+                            background: #2196F3;
+                            color: white;
+                            padding: 10px;
+                            border-radius: 5px;
+                            cursor: pointer;
+                            z-index: 1000;
+                        }
+                    </style>
+                </head>
+                <body>
+                    <div class="no-print" onclick="window.print()">🖨️ 点击打印</div>
+                    
+                    <div class="print-header">
+                        <h1>运输单据</h1>
+                    </div>
+                    
+                    <div class="print-info">
+                        <p><strong>生成时间:</strong> ${timestamp} | <strong>文档数量:</strong> ${documents.length} 个 | <strong>会话:</strong> ${sessionData.sessionId || currentSessionId}</p>
+                    </div>
+
+                    <table class="excel-table">
+                        <tr class="header-row">
+                            <td>A</td>
+                            <td>B</td>
+                            <td>C</td>
+                            <td>D</td>
+                            <td>E</td>
+                            <td>F</td>
+                            <td>G</td>
+                        </tr>
+                        <tr>
+                            <th>QUANTITA</th>
+                            <th>DESCRIZIONE DEI BENI</th>
+                            <th></th>
+                            <th></th>
+                            <th></th>
+                            <th></th>
+                            <th>IMPORTO</th>
+                        </tr>
+                        <!-- 空行到第12行 -->
+                        ${Array(9).fill().map(() => '<tr class="empty-row"><td></td><td></td><td></td><td></td><td></td><td></td><td></td></tr>').join('')}
+                        
+                        <!-- 数据行从第12行开始 -->
+                        ${tableRows}
+                        
+                        <!-- 补充空行到第41行 -->
+                        ${Array(Math.max(0, 28 - documents.length)).fill().map(() => '<tr class="empty-row"><td></td><td></td><td></td><td></td><td></td><td></td><td></td></tr>').join('')}
+                    </table>
+
+                    <div class="print-footer">
+                        <p>由 FileCognize 文档识别系统生成 | ${timestamp}</p>
+                    </div>
+                    
+                    <script>
+                        // 自动聚焦到打印按钮
+                        window.onload = function() {
+                            setTimeout(() => {
+                                window.print();
+                            }, 500);
+                        };
+                    </script>
+                </body>
+                </html>
+            `;
         }
 
 
