@@ -227,6 +227,9 @@ app.use(cors({
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 
+// 静态文件服务 - 提供新的前端页面
+app.use(express.static('public'));
+
 // 创建uploads目录
 const uploadsDir = path.join(__dirname, 'uploads');
 if (!fs.existsSync(uploadsDir)) {
