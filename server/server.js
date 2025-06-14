@@ -1032,7 +1032,7 @@ app.post('/api/ocr-and-process', upload.single('image'), async (req, res) => {
   }
 });
 
-// 导出Excel文件 - 严格按照output.xlsx模板
+// 导出Excel文件 - 严格按照output.xlsx模板，保持所有原始格式
 app.get('/api/export/:sessionId', (req, res) => {
   try {
     const sessionId = req.params.sessionId;
@@ -1053,9 +1053,19 @@ app.get('/api/export/:sessionId', (req, res) => {
       throw new Error('找不到output.xlsx模板文件');
     }
 
-    const workbook = XLSX.readFile(templatePath);
-    const sheetName = workbook.SheetNames[0];
-    const worksheet = workbook.Sheets[sheetName];
+    // 读取原始模板
+    const originalWorkbook = XLSX.readFile(templatePath);
+    const sheetName = originalWorkbook.SheetNames[0];
+    const originalWorksheet = originalWorkbook.Sheets[sheetName];
+
+    // 创建新工作簿，完全复制原始模板
+    const exportWorkbook = XLSX.utils.book_new();
+    
+    // 深度复制工作表，保持所有格式、合并单元格等
+    const exportWorksheet = {};
+    Object.keys(originalWorksheet).forEach(key => {
+      exportWorksheet[key] = JSON.parse(JSON.stringify(originalWorksheet[key]));
+    });
 
     console.log(`📋 使用模板: ${sheetName}`);
     console.log(`📊 准备写入 ${sessionData.documents.length} 条记录`);
@@ -1070,21 +1080,21 @@ app.get('/api/export/:sessionId', (req, res) => {
         // A列: QUANTITA
         if (item.extractedData['Quantita']) {
           const cellA = `A${currentRow}`;
-          worksheet[cellA] = { v: item.extractedData['Quantita'], t: 's' };
+          exportWorksheet[cellA] = { v: item.extractedData['Quantita'], t: 's' };
           console.log(`  ${cellA}: ${item.extractedData['Quantita']}`);
         }
         
         // B列: DESCRIZIONE DEI BENI
         if (item.extractedData['Descrizione Articolo']) {
           const cellB = `B${currentRow}`;
-          worksheet[cellB] = { v: item.extractedData['Descrizione Articolo'], t: 's' };
+          exportWorksheet[cellB] = { v: item.extractedData['Descrizione Articolo'], t: 's' };
           console.log(`  ${cellB}: ${item.extractedData['Descrizione Articolo']}`);
         }
         
         // G列: IMPORTO (Numero Documento)
         if (item.extractedData['Numero Documento']) {
           const cellG = `G${currentRow}`;
-          worksheet[cellG] = { v: item.extractedData['Numero Documento'], t: 's' };
+          exportWorksheet[cellG] = { v: item.extractedData['Numero Documento'], t: 's' };
           console.log(`  ${cellG}: ${item.extractedData['Numero Documento']}`);
         }
         
@@ -1092,12 +1102,24 @@ app.get('/api/export/:sessionId', (req, res) => {
       }
     });
 
-    // 更新工作表范围
-    const range = XLSX.utils.decode_range(worksheet['!ref']);
-    if (currentRow - 1 > range.e.r) {
-      range.e.r = currentRow - 1;
-      worksheet['!ref'] = XLSX.utils.encode_range(range);
+    // 确保工作表范围包含所有数据，包括A1单元格
+    const originalRange = XLSX.utils.decode_range(originalWorksheet['!ref']);
+    
+    // 扩展范围以包含A1单元格（如果存在）
+    let finalRange = {
+      s: { c: 0, r: 0 }, // 从A1开始
+      e: { c: originalRange.e.c, r: Math.max(originalRange.e.r, currentRow - 1) }
+    };
+    
+    // 如果有新数据行，扩展范围
+    if (currentRow - 1 > originalRange.e.r) {
+      finalRange.e.r = currentRow - 1;
     }
+    
+    exportWorksheet['!ref'] = XLSX.utils.encode_range(finalRange);
+
+    // 添加工作表到新工作簿
+    XLSX.utils.book_append_sheet(exportWorkbook, exportWorksheet, sheetName);
 
     // 生成文件
     const filename = `FileCognize_Export_${sessionId}_${new Date().toISOString().slice(0, 19).replace(/:/g, '-')}.xlsx`;
@@ -1109,10 +1131,16 @@ app.get('/api/export/:sessionId', (req, res) => {
       fs.mkdirSync(exportsDir, { recursive: true });
     }
 
-    XLSX.writeFile(workbook, filepath);
+    // 写入文件，保持所有原始格式
+    XLSX.writeFile(exportWorkbook, filepath);
 
     console.log(`✅ 导出完成: ${filename}`);
     console.log(`📊 成功导出 ${sessionData.documents.length} 条记录到模板`);
+    
+    // 验证合并单元格是否保持
+    if (exportWorksheet['!merges']) {
+      console.log(`🔗 保持了 ${exportWorksheet['!merges'].length} 个合并单元格`);
+    }
 
     // 发送文件
     res.download(filepath, filename, (err) => {
