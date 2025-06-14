@@ -893,10 +893,25 @@ app.post('/api/ocr', upload.single('image'), async (req, res) => {
     }, 5 * 60 * 1000); // 5分钟后删除
 
     if (ocrResult.success) {
+      // 分析文本结构并提取数据
+      const structure = analyzeTemplateStructure(ocrResult.text);
+      
+      // 只返回提取的三个字段，简化输出
+      const simplifiedResult = {
+        'Numero Documento': structure.extractedData['Numero Documento'] || '',
+        'Quantita': structure.extractedData['Quantita'] || '',
+        'Descrizione Articolo': structure.extractedData['Descrizione Articolo'] || ''
+      };
+
       res.json({
         success: true,
-        message: 'OCR识别完成',
-        text: ocrResult.text,
+        message: 'OCR识别完成，提取到3个字段',
+        extractedFields: simplifiedResult,
+        mapping: {
+          'Numero Documento': 'IMPORTO列 (G列)',
+          'Quantita': 'QUANTITA列 (A列)', 
+          'Descrizione Articolo': 'DESCRIZIONE DEI BENI列 (B列)'
+        },
         confidence: ocrResult.confidence,
         language: ocrResult.language || 'chi_sim+eng',
         filename: req.file.originalname
@@ -905,7 +920,11 @@ app.post('/api/ocr', upload.single('image'), async (req, res) => {
       res.status(500).json({
         success: false,
         error: 'OCR识别失败: ' + ocrResult.error,
-        text: '',
+        extractedFields: {
+          'Numero Documento': '',
+          'Quantita': '',
+          'Descrizione Articolo': ''
+        },
         confidence: 0
       });
     }
@@ -981,16 +1000,22 @@ app.post('/api/ocr-and-process', upload.single('image'), async (req, res) => {
       }
     }, 5 * 60 * 1000);
 
+    // 只返回提取的三个字段，简化输出
+    const simplifiedResult = {
+      'Numero Documento': structure.extractedData['Numero Documento'] || '',
+      'Quantita': structure.extractedData['Quantita'] || '',
+      'Descrizione Articolo': structure.extractedData['Descrizione Articolo'] || ''
+    };
+
     res.json({
       success: true,
-      message: 'OCR识别和数据处理完成',
-      ocrResult: {
-        text: ocrResult.text,
-        confidence: ocrResult.confidence,
-        language: ocrResult.language
+      message: 'OCR识别完成，提取到3个字段',
+      extractedFields: simplifiedResult,
+      mapping: {
+        'Numero Documento': 'IMPORTO列 (G列)',
+        'Quantita': 'QUANTITA列 (A列)', 
+        'Descrizione Articolo': 'DESCRIZIONE DEI BENI列 (B列)'
       },
-      extractedData: structure.extractedData,
-      processedData: processedData,
       sessionId: sessionId,
       filename: req.file.originalname
     });
@@ -1000,6 +1025,115 @@ app.post('/api/ocr-and-process', upload.single('image'), async (req, res) => {
     res.status(500).json({ 
       success: false,
       error: 'OCR处理服务错误: ' + error.message 
+    });
+  }
+});
+
+// 导出Excel文件 - 严格按照output.xlsx模板
+app.get('/api/export/:sessionId', (req, res) => {
+  try {
+    const sessionId = req.params.sessionId;
+    const sessionData = global.documentSessions?.[sessionId];
+    
+    if (!sessionData || !sessionData.documents || sessionData.documents.length === 0) {
+      return res.status(404).json({ 
+        success: false, 
+        message: '未找到会话数据或没有处理过的数据' 
+      });
+    }
+
+    console.log(`📤 开始导出会话 ${sessionId} 的数据...`);
+
+    // 读取output.xlsx模板
+    const templatePath = path.join(__dirname, '..', 'output.xlsx');
+    if (!fs.existsSync(templatePath)) {
+      throw new Error('找不到output.xlsx模板文件');
+    }
+
+    const workbook = XLSX.readFile(templatePath);
+    const sheetName = workbook.SheetNames[0];
+    const worksheet = workbook.Sheets[sheetName];
+
+    console.log(`📋 使用模板: ${sheetName}`);
+    console.log(`📊 准备写入 ${sessionData.documents.length} 条记录`);
+
+    // 从第12行开始写入数据 (A11是表头，A12开始是数据)
+    let currentRow = 12;
+    
+    sessionData.documents.forEach((item, index) => {
+      if (item.extractedData) {
+        console.log(`✍️ 写入第${index + 1}条记录到第${currentRow}行:`);
+        
+        // A列: QUANTITA
+        if (item.extractedData['Quantita']) {
+          const cellA = `A${currentRow}`;
+          worksheet[cellA] = { v: item.extractedData['Quantita'], t: 's' };
+          console.log(`  ${cellA}: ${item.extractedData['Quantita']}`);
+        }
+        
+        // B列: DESCRIZIONE DEI BENI
+        if (item.extractedData['Descrizione Articolo']) {
+          const cellB = `B${currentRow}`;
+          worksheet[cellB] = { v: item.extractedData['Descrizione Articolo'], t: 's' };
+          console.log(`  ${cellB}: ${item.extractedData['Descrizione Articolo']}`);
+        }
+        
+        // G列: IMPORTO (Numero Documento)
+        if (item.extractedData['Numero Documento']) {
+          const cellG = `G${currentRow}`;
+          worksheet[cellG] = { v: item.extractedData['Numero Documento'], t: 's' };
+          console.log(`  ${cellG}: ${item.extractedData['Numero Documento']}`);
+        }
+        
+        currentRow++;
+      }
+    });
+
+    // 更新工作表范围
+    const range = XLSX.utils.decode_range(worksheet['!ref']);
+    if (currentRow - 1 > range.e.r) {
+      range.e.r = currentRow - 1;
+      worksheet['!ref'] = XLSX.utils.encode_range(range);
+    }
+
+    // 生成文件
+    const filename = `FileCognize_Export_${sessionId}_${new Date().toISOString().slice(0, 19).replace(/:/g, '-')}.xlsx`;
+    const filepath = path.join(__dirname, 'exports', filename);
+    
+    // 确保exports目录存在
+    const exportsDir = path.join(__dirname, 'exports');
+    if (!fs.existsSync(exportsDir)) {
+      fs.mkdirSync(exportsDir, { recursive: true });
+    }
+
+    XLSX.writeFile(workbook, filepath);
+
+    console.log(`✅ 导出完成: ${filename}`);
+    console.log(`📊 成功导出 ${sessionData.documents.length} 条记录到模板`);
+
+    // 发送文件
+    res.download(filepath, filename, (err) => {
+      if (err) {
+        console.error('文件下载失败:', err);
+        res.status(500).json({ success: false, message: '文件下载失败' });
+      } else {
+        // 下载完成后删除临时文件
+        setTimeout(() => {
+          try {
+            fs.unlinkSync(filepath);
+            console.log(`🗑️ 临时文件已删除: ${filename}`);
+          } catch (deleteErr) {
+            console.error('删除临时文件失败:', deleteErr);
+          }
+        }, 5000);
+      }
+    });
+
+  } catch (error) {
+    console.error('导出失败:', error);
+    res.status(500).json({ 
+      success: false, 
+      message: '导出失败: ' + error.message 
     });
   }
 });
