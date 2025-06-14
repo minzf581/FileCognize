@@ -14,37 +14,47 @@ kill_port_process() {
     local port=$1
     echo "🔍 检查端口 $port..."
     
-    # 查找占用端口的进程
-    local pid=$(lsof -ti:$port)
-    
-    if [ ! -z "$pid" ]; then
-        echo "⚠️  发现端口 $port 被进程 $pid 占用，正在终止..."
-        kill -9 $pid 2>/dev/null
-        sleep 1
+    # 多次尝试清理端口
+    for i in {1..3}; do
+        # 查找占用端口的进程
+        local pid=$(lsof -ti:$port)
         
-        # 再次检查是否成功终止
-        local check_pid=$(lsof -ti:$port)
-        if [ -z "$check_pid" ]; then
-            echo "✅ 端口 $port 已释放"
+        if [ ! -z "$pid" ]; then
+            echo "⚠️  发现端口 $port 被进程 $pid 占用，正在终止... (尝试 $i/3)"
+            kill -9 $pid 2>/dev/null
+            sleep 2
+            
+            # 再次检查是否成功终止
+            local check_pid=$(lsof -ti:$port)
+            if [ -z "$check_pid" ]; then
+                echo "✅ 端口 $port 已释放"
+                return 0
+            fi
         else
-            echo "❌ 端口 $port 仍被占用，请手动检查"
+            echo "✅ 端口 $port 空闲"
+            return 0
         fi
-    else
-        echo "✅ 端口 $port 空闲"
+    done
+    
+    # 如果3次尝试后仍然占用，报告错误
+    local final_pid=$(lsof -ti:$port)
+    if [ ! -z "$final_pid" ]; then
+        echo "❌ 端口 $port 仍被进程 $final_pid 占用，请手动检查"
+        return 1
     fi
 }
 
-# 函数：杀掉所有node进程（可选，更彻底的清理）
+# 函数：杀掉所有node进程（更彻底的清理）
 kill_node_processes() {
     echo "🔍 检查所有Node.js进程..."
     
-    # 查找所有node进程，排除当前脚本
-    local node_pids=$(pgrep -f "node.*server" | grep -v $$)
+    # 查找所有相关的node进程
+    local node_pids=$(ps aux | grep -E "(node.*server|FileCognize)" | grep -v grep | grep -v $$ | awk '{print $2}')
     
     if [ ! -z "$node_pids" ]; then
         echo "⚠️  发现Node.js服务进程，正在终止..."
         echo "$node_pids" | xargs kill -9 2>/dev/null
-        sleep 2
+        sleep 3
         echo "✅ Node.js进程已清理"
     else
         echo "✅ 没有发现运行中的Node.js服务进程"
@@ -63,10 +73,14 @@ done
 
 echo ""
 echo "🔄 等待进程完全终止..."
-sleep 3
+sleep 5
 
-# 方法2：杀掉所有相关node进程（可选，取消注释启用）
-# kill_node_processes
+# 方法2：杀掉所有相关node进程（启用更彻底的清理）
+kill_node_processes
+
+echo ""
+echo "🔄 再次等待进程完全终止..."
+sleep 3
 
 echo ""
 echo "🚀 启动FileCognize服务..."
