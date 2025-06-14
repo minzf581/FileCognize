@@ -1,2 +1,71 @@
 ✅ 使用新的前端页面: /Users/lewis_1/source code/FileCognize/public
 文件整理服务器运行在端口 3001
+开始OCR识别并处理: 3.pdf
+PDF文本提取完成，文本长度: 2
+PDF文本内容较少，可能是扫描版PDF，尝试OCR识别...
+PDF转图片成功，开始OCR识别: /Users/lewis_1/source code/FileCognize/server/uploads/upload_1749908626431_page1.png
+🔍 开始识别文档: upload_1749908626431_page1.png
+🔍 执行OCR识别 (尝试 1/3): upload_1749908626431_page1.png
+📁 文件大小: 4162.52 KB
+🔄 Worker未初始化，正在重新初始化...
+🔧 创建Tesseract worker... (尝试 1/3)
+🔧 正在创建新的Tesseract worker...
+Error: failed to load ./ita.special-words
+✅ 意大利语OCR服务初始化完成
+📁 使用绝对路径: /Users/lewis_1/source code/FileCognize/server/uploads/upload_1749908626431_page1.png
+📝 OCR识别成功，置信度: 60.0%
+📄 识别文本长度: 1830 字符
+🔍 开始提取Numero Documento...
+📄 搜索文本长度: 1830 字符
+📄 文本预览: "OUR Rntrrranrimmrmzavz—Ì————e——— Sl
+ Meoni & Ci ini
+eoni lampalini s.p.a.
+i ‘ ’ Spett.
+RAPPRESENTANZE CON DEPOSITO E COMMERCIO CONFEZIONE APOLLO DI CHEN DONGPING
+ACCESSORI PER CONFEZIONE VIA DEL CASTELLUCCIO, 38
+FI
+ENEA END I Area DI n e e a aaa 53 EMPOLI
+50053 EMPOLI (Firenze) - Via Reali, 32/24 a
+..."
+🔍 尝试模式 1: (\d{3}\/[a-zA-Z])
+❌ 模式 1 无匹配
+🔍 尝试模式 2: (\d{3}\/\d+)
+✅ 找到匹配项: ["544/8"]
+✅ 找到Numero Documento (3位数字格式): 544/8
+🔍 开始提取Quantita...
+📄 搜索文本长度: 1830 字符
+🔍 尝试Quantita模式 1: (\d{2,3}[,\.]\d{2})
+✅ 找到数字匹配项: ["571.93","200.00"]
+📊 有效数字: [{"original":"571.93","value":571.93},{"original":"200.00","value":200}]
+✅ 找到Quantita (优选范围): 200.00
+🔍 开始提取Descrizione Articolo...
+📄 原始文本长度: 1830 字符
+📄 原始文本预览: "OUR Rntrrranrimmrmzavz—Ì————e——— Sl
+ Meoni & Ci ini
+eoni lampalini s.p.a.
+i ‘ ’ Spett.
+RAPPRESENTANZE CON DEPOSITO E COMMERCIO CONFEZIONE APOLLO DI CHEN DONGPING
+ACCESSORI PER CONFEZIONE VIA DEL CASTELLUCCIO, 38
+FI
+ENEA END I Area DI n e e a aaa 53 EMPOLI
+50053 EMPOLI (Firenze) - Via Reali, 32/24 a
+Zona Industriale Terrafino
+celeron OLE? - Fax 0571.930161
+e-mail: in eoniciampalini.it - A ici lini.i L di Destinazione dei Beni
+Capitale Sociale Euro 200.000,00 none ai i
+R.E.A. Firenze 296618 IDEM
+i..."
+🔍 标准化文本: "OUR RNTRRRANRIMMRMZAVZ E SL MEONI CI INI EONI LAMPALINI S P A I SPETT RAPPRESENTANZE CON DEPOSITO E COMMERCIO CONFEZIONE APOLLO DI CHEN DONGPING ACCESSORI PER CONFEZIONE VIA DEL CASTELLUCCIO FI ENEA END I AREA DI N E E A AAA EMPOLI EMPOLI FIRENZE VIA REALI A ZONA INDUSTRIALE TERRAFINO CELERON OLE FA..."
+📊 开始相似度匹配...
+📊 "NS .CERNIERE A SCORCIARE" 相似度: 0.0%
+📊 "CATENA CONTINUA METALLO MONT,BLOCCHETTO VARIE MIS" 相似度: 5.5%
+📊 "CERNIERE A MONTARE CURSORE" 相似度: 0.7%
+📊 "CERNIERE A MONTARE TIRETTO" 相似度: 1.4%
+🔍 尝试关键词匹配...
+✅ 关键词匹配: CATENA CONTINUA (METALLO/SPIRALE)
+📊 最终识别结果: {
+  'Numero Documento': '544/8',
+  Quantita: '200.00',
+  'Descrizione Articolo': 'CATENA CONTINUA METALLO MONT,BLOCCHETTO VARIE MIS'
+}
+OCR识别成功，提取到字段: [ 'Numero Documento', 'Quantita', 'Descrizione Articolo' ]

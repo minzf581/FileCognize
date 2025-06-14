@@ -1174,9 +1174,20 @@ app.post('/api/pdf-ocr-and-process', upload.single('file'), async (req, res) => 
 
             // 返回标准格式的数据
             return res.json({
-              'Numero Documento': extractedData['Numero Documento'] || 'N/A',
-              'Quantita': extractedData['Quantita'] || 'N/A',
-              'Descrizione Articolo': extractedData['Descrizione Articolo'] || 'N/A'
+              success: true,
+              message: `OCR识别完成，提取到${Object.keys(extractedData).length}个字段`,
+              extractedFields: {
+                'Numero Documento': extractedData['Numero Documento'] || 'N/A',
+                'Quantita': extractedData['Quantita'] || 'N/A',
+                'Descrizione Articolo': extractedData['Descrizione Articolo'] || 'N/A'
+              },
+              mapping: {
+                'Numero Documento': 'IMPORTO列 (G列)',
+                'Quantita': 'QUANTITA列 (A列)', 
+                'Descrizione Articolo': 'DESCRIZIONE DEI BENI列 (B列)'
+              },
+              sessionId: sessionId,
+              filename: req.file.originalname
             });
           }
           
@@ -1240,17 +1251,39 @@ app.post('/api/pdf-ocr-and-process', upload.single('file'), async (req, res) => 
             }
           }, 5 * 60 * 1000);
 
-          // 返回标准格式的数据
-          return res.json({
-            'Numero Documento': extractedData['Numero Documento'] || 'N/A',
-            'Quantita': extractedData['Quantita'] || 'N/A',
-            'Descrizione Articolo': extractedData['Descrizione Articolo'] || 'N/A'
-          });
+                      // 返回标准格式的数据
+            return res.json({
+              success: true,
+              message: `OCR识别完成，提取到${Object.keys(extractedData).length}个字段`,
+              extractedFields: {
+                'Numero Documento': extractedData['Numero Documento'] || 'N/A',
+                'Quantita': extractedData['Quantita'] || 'N/A',
+                'Descrizione Articolo': extractedData['Descrizione Articolo'] || 'N/A'
+              },
+              mapping: {
+                'Numero Documento': 'IMPORTO列 (G列)',
+                'Quantita': 'QUANTITA列 (A列)', 
+                'Descrizione Articolo': 'DESCRIZIONE DEI BENI列 (B列)'
+              },
+              sessionId: sessionId,
+              filename: req.file.originalname
+            });
         } else {
           return res.json({
-            'Numero Documento': 'N/A',
-            'Quantita': 'N/A',
-            'Descrizione Articolo': 'N/A'
+            success: true,
+            message: 'OCR识别完成，但未提取到字段',
+            extractedFields: {
+              'Numero Documento': 'N/A',
+              'Quantita': 'N/A',
+              'Descrizione Articolo': 'N/A'
+            },
+            mapping: {
+              'Numero Documento': 'IMPORTO列 (G列)',
+              'Quantita': 'QUANTITA列 (A列)', 
+              'Descrizione Articolo': 'DESCRIZIONE DEI BENI列 (B列)'
+            },
+            sessionId: sessionId,
+            filename: req.file.originalname
           });
         }
         

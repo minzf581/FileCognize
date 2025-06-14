@@ -17,8 +17,8 @@ BLUE='\033[0;34m'
 NC='\033[0m' # No Color
 
 # 解析命令行参数
-SHOW_LOGS=false
-DEBUG_MODE=false
+SHOW_LOGS=true
+DEBUG_MODE=true
 
 for arg in "$@"; do
     case $arg in
