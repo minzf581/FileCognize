@@ -1207,16 +1207,64 @@ app.get('/api/health', (req, res) => {
   res.json({ status: 'OK', timestamp: new Date().toISOString() });
 });
 
+// 调试端点 - 检查文件路径
+app.get('/api/debug/paths', (req, res) => {
+  const paths = {
+    __dirname: __dirname,
+    'process.cwd()': process.cwd(),
+    'NODE_ENV': process.env.NODE_ENV,
+    'PORT': process.env.PORT,
+    publicPaths: [
+      path.join(__dirname, '../public'),
+      path.join(process.cwd(), 'public'),
+      path.join(__dirname, '../../public'),
+      '/app/public'
+    ].map(p => ({
+      path: p,
+      exists: fs.existsSync(p),
+      indexExists: fs.existsSync(path.join(p, 'index.html'))
+    })),
+    buildPaths: [
+      path.join(__dirname, '../build'),
+      path.join(__dirname, '../client/build')
+    ].map(p => ({
+      path: p,
+      exists: fs.existsSync(p),
+      indexExists: fs.existsSync(path.join(p, 'index.html'))
+    }))
+  };
+  
+  res.json(paths);
+});
+
 // 生产环境下提供静态文件 - 优先使用新的前端页面
 if (process.env.NODE_ENV === 'production') {
-  // 优先检查public目录的新前端页面
-  const publicPath = path.join(__dirname, '../public');
-  const publicIndexPath = path.join(publicPath, 'index.html');
+  // 尝试多个可能的public目录路径
+  const publicPaths = [
+    path.join(__dirname, '../public'),     // 相对于server目录
+    path.join(process.cwd(), 'public'),    // 相对于项目根目录
+    path.join(__dirname, '../../public'),  // 如果server在子目录中
+    '/app/public'                          // Railway的绝对路径
+  ];
   
-  if (fs.existsSync(publicIndexPath)) {
-    console.log(`✅ 使用新的前端页面: ${publicPath}`);
+  let publicPath = null;
+  let publicIndexPath = null;
+  
+  for (const testPath of publicPaths) {
+    const indexPath = path.join(testPath, 'index.html');
+    if (fs.existsSync(indexPath)) {
+      publicPath = testPath;
+      publicIndexPath = indexPath;
+      console.log(`✅ 使用新的前端页面: ${publicPath}`);
+      break;
+    }
+  }
+  
+  if (publicPath && publicIndexPath) {
+    // 提供静态文件服务
+    app.use(express.static(publicPath));
     
-    // 为所有路由返回新的前端页面
+    // 为所有非API路由返回新的前端页面
     app.get('*', (req, res) => {
       // 如果是API请求，跳过
       if (req.path.startsWith('/api/')) {
@@ -1225,6 +1273,9 @@ if (process.env.NODE_ENV === 'production') {
       res.sendFile(publicIndexPath);
     });
   } else {
+    console.error('❌ 未找到public目录，尝试的路径:');
+    publicPaths.forEach(p => console.error(`  - ${p}`));
+    
     // 回退到旧的构建文件
     const buildPaths = [
       path.join(__dirname, '../build'),        // 根目录的build文件夹
