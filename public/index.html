@@ -174,7 +174,7 @@
             text-align: center;
         }
         
-        .export-btn {
+        .export-btn, .camera-btn, .print-btn, .capture-btn, .close-camera-btn {
             background: #28a745;
             color: white;
             border: none;
@@ -186,15 +186,55 @@
             transition: all 0.2s;
         }
         
-        .export-btn:hover {
-            background: #218838;
-            transform: translateY(-1px);
+        .camera-btn {
+            background: #4CAF50;
         }
         
-        .export-btn:disabled {
+        .print-btn {
+            background: #FF9800;
+        }
+        
+        .capture-btn {
+            background: #2196F3;
+        }
+        
+        .close-camera-btn {
+            background: #f44336;
+        }
+        
+        .export-btn:hover, .camera-btn:hover, .print-btn:hover, .capture-btn:hover, .close-camera-btn:hover {
+            transform: translateY(-1px);
+            opacity: 0.9;
+        }
+        
+        .export-btn:disabled, .print-btn:disabled {
             background: #ccc;
             cursor: not-allowed;
             transform: none;
+        }
+        
+        .upload-buttons {
+            display: flex;
+            justify-content: center;
+            gap: 10px;
+            flex-wrap: wrap;
+            margin: 20px 0;
+        }
+        
+        .camera-section {
+            margin-top: 20px;
+            text-align: center;
+        }
+        
+        .camera-section video {
+            width: 100%;
+            max-width: 400px;
+            border-radius: 10px;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.2);
+        }
+        
+        .camera-controls {
+            margin-top: 15px;
         }
         
         .session-info {
@@ -238,17 +278,30 @@
         
         <div class="content">
             <div class="upload-section">
-                <div class="session-input">
-                    <input type="text" id="sessionId" placeholder="输入会话ID (可选，用于批量处理)" />
-                </div>
-                
                 <div class="upload-area" id="uploadArea">
-                    <h3>📁 上传文档图片</h3>
-                    <p>点击选择文件或拖拽图片到此处</p>
-                    <button class="upload-btn" onclick="document.getElementById('fileInput').click()">
-                        选择图片文件
-                    </button>
-                    <input type="file" id="fileInput" accept="image/*" style="display: none;" />
+                    <h3>📁 上传文档</h3>
+                    <p>支持图片和PDF文件，点击选择文件或拖拽到此处</p>
+                    
+                    <div class="upload-buttons">
+                        <button class="upload-btn" onclick="document.getElementById('fileInput').click()">
+                            📁 选择文件
+                        </button>
+                        <button class="camera-btn" onclick="openCamera()">
+                            📷 拍照识别
+                        </button>
+                    </div>
+                    
+                    <input type="file" id="fileInput" accept="image/*,application/pdf" style="display: none;" />
+                    
+                    <!-- 相机界面 -->
+                    <div class="camera-section" id="cameraSection" style="display: none;">
+                        <video id="cameraVideo" autoplay playsinline></video>
+                        <div class="camera-controls">
+                            <button class="capture-btn" onclick="capturePhoto()">📸 拍照</button>
+                            <button class="close-camera-btn" onclick="closeCamera()">❌ 关闭</button>
+                        </div>
+                        <canvas id="captureCanvas" style="display: none;"></canvas>
+                    </div>
                 </div>
                 
                 <div class="progress" id="progress">
@@ -264,6 +317,9 @@
                     <button class="export-btn" id="exportBtn" onclick="exportData()" disabled>
                         📥 导出Excel文件
                     </button>
+                    <button class="print-btn" id="printBtn" onclick="printData()" disabled>
+                        🖨️ 打印文件
+                    </button>
                     <button class="upload-btn" onclick="resetForm()">
                         🔄 继续识别
                     </button>
@@ -275,6 +331,7 @@
     <script>
         let currentSessionId = null;
         let hasData = false;
+        let cameraStream = null;
 
         const fileInput = document.getElementById('fileInput');
         const uploadArea = document.getElementById('uploadArea');
@@ -283,6 +340,10 @@
         const result = document.getElementById('result');
         const resultContent = document.getElementById('resultContent');
         const exportBtn = document.getElementById('exportBtn');
+        const printBtn = document.getElementById('printBtn');
+        const cameraSection = document.getElementById('cameraSection');
+        const cameraVideo = document.getElementById('cameraVideo');
+        const captureCanvas = document.getElementById('captureCanvas');
 
         uploadArea.addEventListener('dragover', (e) => {
             e.preventDefault();
@@ -309,12 +370,12 @@
         });
 
         async function handleFile(file) {
-            if (!file.type.startsWith('image/')) {
-                showError('请选择图片文件！');
+            if (!file.type.startsWith('image/') && file.type !== 'application/pdf') {
+                showError('请选择图片文件或PDF文件！');
                 return;
             }
 
-            const sessionId = document.getElementById('sessionId').value.trim() || generateSessionId();
+            const sessionId = generateSessionId();
             currentSessionId = sessionId;
 
             showProgress(true);
@@ -322,12 +383,14 @@
 
             try {
                 const formData = new FormData();
-                formData.append('image', file);
-                formData.append('sessionId', sessionId);
+                formData.append('file', file);
+                
+                // 根据文件类型选择不同的API端点
+                const endpoint = file.type === 'application/pdf' ? '/api/pdf-ocr-and-process' : '/api/ocr-and-process';
 
                 updateProgress(30, '正在上传文件...');
 
-                const response = await fetch('/api/ocr-and-process', {
+                const response = await fetch(`${endpoint}?sessionId=${sessionId}`, {
                     method: 'POST',
                     body: formData
                 });
@@ -344,6 +407,7 @@
                         displayResult(data);
                         hasData = true;
                         exportBtn.disabled = false;
+                        printBtn.disabled = false;
                     } else {
                         showError(data.message || '识别失败，请重试');
                     }
@@ -360,7 +424,7 @@
 
             let html = `
                 <div class="session-info">
-                    <strong>会话ID:</strong> ${sessionId} | <strong>文件:</strong> ${filename}
+                    <strong>文件:</strong> ${filename}
                 </div>
                 
                 <div class="extracted-fields">
@@ -392,6 +456,7 @@
             result.classList.add('error');
             hasData = false;
             exportBtn.disabled = true;
+            printBtn.disabled = true;
         }
 
         function showProgress(show) {
@@ -451,10 +516,117 @@
             fileInput.value = '';
             hasData = false;
             exportBtn.disabled = true;
+            printBtn.disabled = true;
+            currentSessionId = null;
+            closeCamera();
         }
 
         function generateSessionId() {
             return 'session_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9);
+        }
+
+        // 相机功能
+        async function openCamera() {
+            try {
+                cameraStream = await navigator.mediaDevices.getUserMedia({ 
+                    video: { 
+                        facingMode: 'environment' // 优先使用后置摄像头
+                    } 
+                });
+                cameraVideo.srcObject = cameraStream;
+                cameraSection.style.display = 'block';
+                uploadArea.style.display = 'none';
+            } catch (error) {
+                showError('无法访问摄像头，请检查权限设置');
+            }
+        }
+
+        function closeCamera() {
+            if (cameraStream) {
+                cameraStream.getTracks().forEach(track => track.stop());
+                cameraStream = null;
+            }
+            cameraSection.style.display = 'none';
+            uploadArea.style.display = 'block';
+        }
+
+        function capturePhoto() {
+            const canvas = captureCanvas;
+            const video = cameraVideo;
+            
+            canvas.width = video.videoWidth;
+            canvas.height = video.videoHeight;
+            
+            const ctx = canvas.getContext('2d');
+            ctx.drawImage(video, 0, 0);
+            
+            canvas.toBlob(blob => {
+                const file = new File([blob], 'camera-capture.jpg', { type: 'image/jpeg' });
+                closeCamera();
+                handleFile(file);
+            }, 'image/jpeg', 0.8);
+        }
+
+        // 打印功能
+        async function printData() {
+            if (!hasData || !currentSessionId) {
+                showError('没有可打印的数据');
+                return;
+            }
+
+            try {
+                printBtn.disabled = true;
+                printBtn.textContent = '正在准备打印...';
+                
+                updateProgress(20, '正在生成打印文件...');
+                showProgress(true);
+
+                const response = await fetch(`/api/export/${currentSessionId}`);
+                
+                if (!response.ok) {
+                    throw new Error('导出失败');
+                }
+
+                updateProgress(60, '正在准备打印...');
+
+                const blob = await response.blob();
+                const url = URL.createObjectURL(blob);
+                
+                // 创建隐藏的iframe用于打印
+                const iframe = document.createElement('iframe');
+                iframe.style.display = 'none';
+                document.body.appendChild(iframe);
+                
+                iframe.onload = function() {
+                    updateProgress(100, '打印准备完成！');
+                    setTimeout(() => {
+                        showProgress(false);
+                        iframe.contentWindow.print();
+                        
+                        // 显示成功消息
+                        const successMsg = document.createElement('div');
+                        successMsg.style.cssText = 'position: fixed; top: 20px; right: 20px; background: #FF9800; color: white; padding: 15px; border-radius: 5px; z-index: 1000;';
+                        successMsg.textContent = '🖨️ 打印任务已发送！';
+                        document.body.appendChild(successMsg);
+                        setTimeout(() => document.body.removeChild(successMsg), 3000);
+                        
+                        // 清理
+                        setTimeout(() => {
+                            document.body.removeChild(iframe);
+                            URL.revokeObjectURL(url);
+                        }, 1000);
+                    }, 500);
+                };
+                
+                iframe.src = url;
+
+            } catch (error) {
+                showProgress(false);
+                showError(`打印失败: ${error.message}`);
+            } finally {
+                printBtn.disabled = false;
+                printBtn.textContent = '🖨️ 打印文件';
+            }
         }
     </script>
 </body>
