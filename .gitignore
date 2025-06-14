@@ -70,7 +70,11 @@ dist
 
 # Gatsby files
 .cache/
-public
+# public  # 注释掉，允许我们的public目录被提交
+
+# Build directories (避免旧的构建文件)
+build/
+/client/build
 
 # Storybook build outputs
 .out

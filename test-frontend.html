@@ -1,0 +1,347 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>OCR识别测试 - 后端API版本</title>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+            background-color: #f5f5f5;
+        }
+        .container {
+            background: white;
+            padding: 30px;
+            border-radius: 10px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+        h1 {
+            color: #333;
+            text-align: center;
+            margin-bottom: 30px;
+        }
+        .upload-area {
+            border: 2px dashed #ddd;
+            border-radius: 10px;
+            padding: 40px;
+            text-align: center;
+            margin-bottom: 20px;
+            transition: border-color 0.3s;
+        }
+        .upload-area:hover {
+            border-color: #007bff;
+        }
+        .upload-area.dragover {
+            border-color: #007bff;
+            background-color: #f8f9fa;
+        }
+        input[type="file"] {
+            display: none;
+        }
+        .upload-btn {
+            background: #007bff;
+            color: white;
+            padding: 12px 24px;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 16px;
+            margin: 10px;
+        }
+        .upload-btn:hover {
+            background: #0056b3;
+        }
+        .progress {
+            width: 100%;
+            height: 20px;
+            background-color: #e9ecef;
+            border-radius: 10px;
+            overflow: hidden;
+            margin: 20px 0;
+            display: none;
+        }
+        .progress-bar {
+            height: 100%;
+            background-color: #007bff;
+            width: 0%;
+            transition: width 0.3s;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: white;
+            font-size: 12px;
+        }
+        .result {
+            margin-top: 20px;
+            padding: 20px;
+            border-radius: 5px;
+            display: none;
+        }
+        .result.success {
+            background-color: #d4edda;
+            border: 1px solid #c3e6cb;
+            color: #155724;
+        }
+        .result.error {
+            background-color: #f8d7da;
+            border: 1px solid #f5c6cb;
+            color: #721c24;
+        }
+        .extracted-data {
+            background: #f8f9fa;
+            padding: 15px;
+            border-radius: 5px;
+            margin: 10px 0;
+        }
+        .data-item {
+            margin: 5px 0;
+            padding: 5px;
+            background: white;
+            border-radius: 3px;
+        }
+        .confidence {
+            font-weight: bold;
+            color: #007bff;
+        }
+        .session-info {
+            background: #e3f2fd;
+            padding: 10px;
+            border-radius: 5px;
+            margin: 10px 0;
+        }
+        .options {
+            margin: 20px 0;
+            padding: 15px;
+            background: #f8f9fa;
+            border-radius: 5px;
+        }
+        .option-group {
+            margin: 10px 0;
+        }
+        label {
+            display: inline-block;
+            margin-right: 15px;
+            cursor: pointer;
+        }
+        input[type="checkbox"], input[type="radio"] {
+            margin-right: 5px;
+        }
+        input[type="text"] {
+            padding: 8px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            width: 200px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🔍 OCR识别测试 - 后端API版本</h1>
+        
+        <div class="options">
+            <h3>识别选项</h3>
+            <div class="option-group">
+                <label>
+                    <input type="radio" name="apiType" value="ocr" checked>
+                    基本OCR识别
+                </label>
+                <label>
+                    <input type="radio" name="apiType" value="ocr-and-process">
+                    OCR识别并处理缺省模板
+                </label>
+            </div>
+            <div class="option-group">
+                <label>
+                    <input type="checkbox" id="multiLanguage" checked>
+                    多语言识别 (意大利语+英语+中文)
+                </label>
+            </div>
+            <div class="option-group">
+                <label for="sessionId">会话ID (可选):</label>
+                <input type="text" id="sessionId" placeholder="输入会话ID">
+            </div>
+        </div>
+
+        <div class="upload-area" id="uploadArea">
+            <p>📁 点击选择图片文件或拖拽到此处</p>
+            <button class="upload-btn" onclick="document.getElementById('fileInput').click()">
+                选择文件
+            </button>
+            <input type="file" id="fileInput" accept="image/*" onchange="handleFileSelect(event)">
+        </div>
+
+        <div class="progress" id="progress">
+            <div class="progress-bar" id="progressBar">0%</div>
+        </div>
+
+        <div class="result" id="result"></div>
+    </div>
+
+    <script>
+        const uploadArea = document.getElementById('uploadArea');
+        const fileInput = document.getElementById('fileInput');
+        const progress = document.getElementById('progress');
+        const progressBar = document.getElementById('progressBar');
+        const result = document.getElementById('result');
+
+        // 拖拽上传
+        uploadArea.addEventListener('dragover', (e) => {
+            e.preventDefault();
+            uploadArea.classList.add('dragover');
+        });
+
+        uploadArea.addEventListener('dragleave', () => {
+            uploadArea.classList.remove('dragover');
+        });
+
+        uploadArea.addEventListener('drop', (e) => {
+            e.preventDefault();
+            uploadArea.classList.remove('dragover');
+            const files = e.dataTransfer.files;
+            if (files.length > 0) {
+                handleFile(files[0]);
+            }
+        });
+
+        function handleFileSelect(event) {
+            const file = event.target.files[0];
+            if (file) {
+                handleFile(file);
+            }
+        }
+
+        async function handleFile(file) {
+            if (!file.type.startsWith('image/')) {
+                showResult('error', '请选择图片文件！');
+                return;
+            }
+
+            const apiType = document.querySelector('input[name="apiType"]:checked').value;
+            const multiLanguage = document.getElementById('multiLanguage').checked;
+            const sessionId = document.getElementById('sessionId').value.trim();
+
+            showProgress(true);
+            updateProgress(10, '准备上传...');
+
+            try {
+                const formData = new FormData();
+                formData.append('image', file);
+                formData.append('multiLanguage', multiLanguage.toString());
+                
+                if (sessionId) {
+                    formData.append('sessionId', sessionId);
+                }
+
+                updateProgress(30, '正在上传文件...');
+
+                const response = await fetch(`http://localhost:3001/api/${apiType}`, {
+                    method: 'POST',
+                    body: formData
+                });
+
+                updateProgress(60, '正在处理OCR识别...');
+
+                const data = await response.json();
+
+                updateProgress(100, '处理完成！');
+
+                setTimeout(() => {
+                    showProgress(false);
+                    displayResult(data, apiType);
+                }, 1000);
+
+            } catch (error) {
+                showProgress(false);
+                showResult('error', `处理失败: ${error.message}`);
+            }
+        }
+
+        function showProgress(show) {
+            progress.style.display = show ? 'block' : 'none';
+            if (!show) {
+                updateProgress(0, '');
+            }
+        }
+
+        function updateProgress(percent, text) {
+            progressBar.style.width = percent + '%';
+            progressBar.textContent = text || `${percent}%`;
+        }
+
+        function displayResult(data, apiType) {
+            if (data.success) {
+                let html = `
+                    <h3>✅ OCR识别成功</h3>
+                    <div class="confidence">置信度: ${data.ocrResult ? data.ocrResult.confidence : data.confidence}%</div>
+                    <div class="confidence">语言: ${data.ocrResult ? data.ocrResult.language : data.language}</div>
+                `;
+
+                if (data.filename) {
+                    html += `<p><strong>文件名:</strong> ${data.filename}</p>`;
+                }
+
+                // 显示识别的文本
+                const text = data.ocrResult ? data.ocrResult.text : data.text;
+                html += `
+                    <h4>识别文本:</h4>
+                    <div class="extracted-data">
+                        <pre style="white-space: pre-wrap; word-wrap: break-word;">${text}</pre>
+                    </div>
+                `;
+
+                // 如果是处理模板的API，显示提取的数据
+                if (apiType === 'ocr-and-process' && data.extractedData) {
+                    html += `
+                        <h4>提取的数据:</h4>
+                        <div class="extracted-data">
+                    `;
+                    
+                    Object.entries(data.extractedData).forEach(([key, value]) => {
+                        html += `<div class="data-item"><strong>${key}:</strong> ${value}</div>`;
+                    });
+                    
+                    html += `</div>`;
+
+                    // 显示处理结果
+                    if (data.processedData && data.processedData.success) {
+                        html += `
+                            <h4>处理结果:</h4>
+                            <div class="extracted-data">
+                                <div class="data-item">✅ 数据处理成功</div>
+                                <div class="data-item">映射到Excel位置: A${data.processedData.mapping['Quantita'].outputRow}, B${data.processedData.mapping['Descrizione Articolo'].outputRow}, G${data.processedData.mapping['Numero Documento'].outputRow}</div>
+                            </div>
+                        `;
+                    }
+
+                    // 显示会话信息
+                    if (data.sessionId) {
+                        html += `
+                            <div class="session-info">
+                                <strong>会话ID:</strong> ${data.sessionId}<br>
+                                <small>文档已添加到会话中，可以继续添加更多文档</small>
+                            </div>
+                        `;
+                    }
+                }
+
+                if (data.note) {
+                    html += `<p><em>注意: ${data.note}</em></p>`;
+                }
+
+                showResult('success', html);
+            } else {
+                showResult('error', `识别失败: ${data.error}`);
+            }
+        }
+
+        function showResult(type, content) {
+            result.className = `result ${type}`;
+            result.innerHTML = content;
+            result.style.display = 'block';
+        }
+    </script>
+</body>
+</html> 

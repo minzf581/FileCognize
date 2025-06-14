@@ -1,0 +1,461 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>FileCognize - 文档识别系统</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px;
+        }
+        
+        .container {
+            max-width: 800px;
+            margin: 0 auto;
+            background: white;
+            border-radius: 15px;
+            box-shadow: 0 20px 40px rgba(0,0,0,0.1);
+            overflow: hidden;
+        }
+        
+        .header {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 30px;
+            text-align: center;
+        }
+        
+        .header h1 {
+            font-size: 2.5em;
+            margin-bottom: 10px;
+        }
+        
+        .header p {
+            opacity: 0.9;
+            font-size: 1.1em;
+        }
+        
+        .content {
+            padding: 40px;
+        }
+        
+        .upload-section {
+            text-align: center;
+            margin-bottom: 30px;
+        }
+        
+        .upload-area {
+            border: 3px dashed #ddd;
+            border-radius: 10px;
+            padding: 40px;
+            margin: 20px 0;
+            transition: all 0.3s ease;
+            cursor: pointer;
+        }
+        
+        .upload-area:hover {
+            border-color: #667eea;
+            background: #f8f9ff;
+        }
+        
+        .upload-area.dragover {
+            border-color: #667eea;
+            background: #f0f4ff;
+        }
+        
+        .upload-btn {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border: none;
+            padding: 15px 30px;
+            border-radius: 25px;
+            font-size: 16px;
+            cursor: pointer;
+            transition: transform 0.2s;
+        }
+        
+        .upload-btn:hover {
+            transform: translateY(-2px);
+        }
+        
+        .session-input {
+            margin: 20px 0;
+        }
+        
+        .session-input input {
+            width: 100%;
+            padding: 12px;
+            border: 2px solid #ddd;
+            border-radius: 8px;
+            font-size: 16px;
+        }
+        
+        .session-input input:focus {
+            outline: none;
+            border-color: #667eea;
+        }
+        
+        .progress {
+            display: none;
+            margin: 20px 0;
+            background: #f0f0f0;
+            border-radius: 10px;
+            overflow: hidden;
+        }
+        
+        .progress-bar {
+            height: 40px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            width: 0%;
+            transition: width 0.3s;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: white;
+            font-weight: bold;
+        }
+        
+        .result {
+            display: none;
+            margin-top: 30px;
+            padding: 25px;
+            border-radius: 10px;
+            border-left: 5px solid #667eea;
+            background: #f8f9ff;
+        }
+        
+        .result.error {
+            border-left-color: #e74c3c;
+            background: #fdf2f2;
+            color: #e74c3c;
+        }
+        
+        .extracted-fields {
+            display: grid;
+            gap: 15px;
+            margin: 20px 0;
+        }
+        
+        .field-item {
+            background: white;
+            padding: 15px;
+            border-radius: 8px;
+            border: 1px solid #e0e0e0;
+        }
+        
+        .field-label {
+            font-weight: bold;
+            color: #667eea;
+            margin-bottom: 5px;
+        }
+        
+        .field-value {
+            font-size: 1.1em;
+            color: #333;
+        }
+        
+        .field-mapping {
+            font-size: 0.9em;
+            color: #666;
+            font-style: italic;
+        }
+        
+        .actions {
+            margin-top: 30px;
+            text-align: center;
+        }
+        
+        .export-btn {
+            background: #28a745;
+            color: white;
+            border: none;
+            padding: 12px 25px;
+            border-radius: 20px;
+            font-size: 16px;
+            cursor: pointer;
+            margin: 0 10px;
+            transition: all 0.2s;
+        }
+        
+        .export-btn:hover {
+            background: #218838;
+            transform: translateY(-1px);
+        }
+        
+        .export-btn:disabled {
+            background: #ccc;
+            cursor: not-allowed;
+            transform: none;
+        }
+        
+        .session-info {
+            background: #e3f2fd;
+            padding: 15px;
+            border-radius: 8px;
+            margin: 20px 0;
+            text-align: center;
+        }
+        
+        .hidden {
+            display: none !important;
+        }
+        
+        @media (max-width: 600px) {
+            .container {
+                margin: 10px;
+                border-radius: 10px;
+            }
+            
+            .header {
+                padding: 20px;
+            }
+            
+            .header h1 {
+                font-size: 2em;
+            }
+            
+            .content {
+                padding: 20px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>🔍 FileCognize</h1>
+            <p>智能文档识别与数据提取系统</p>
+        </div>
+        
+        <div class="content">
+            <div class="upload-section">
+                <div class="session-input">
+                    <input type="text" id="sessionId" placeholder="输入会话ID (可选，用于批量处理)" />
+                </div>
+                
+                <div class="upload-area" id="uploadArea">
+                    <h3>📁 上传文档图片</h3>
+                    <p>点击选择文件或拖拽图片到此处</p>
+                    <button class="upload-btn" onclick="document.getElementById('fileInput').click()">
+                        选择图片文件
+                    </button>
+                    <input type="file" id="fileInput" accept="image/*" style="display: none;" />
+                </div>
+                
+                <div class="progress" id="progress">
+                    <div class="progress-bar" id="progressBar">0%</div>
+                </div>
+            </div>
+            
+            <div class="result" id="result">
+                <h3>📊 识别结果</h3>
+                <div id="resultContent"></div>
+                
+                <div class="actions">
+                    <button class="export-btn" id="exportBtn" onclick="exportData()" disabled>
+                        📥 导出Excel文件
+                    </button>
+                    <button class="upload-btn" onclick="resetForm()">
+                        🔄 继续识别
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let currentSessionId = null;
+        let hasData = false;
+
+        const fileInput = document.getElementById('fileInput');
+        const uploadArea = document.getElementById('uploadArea');
+        const progress = document.getElementById('progress');
+        const progressBar = document.getElementById('progressBar');
+        const result = document.getElementById('result');
+        const resultContent = document.getElementById('resultContent');
+        const exportBtn = document.getElementById('exportBtn');
+
+        uploadArea.addEventListener('dragover', (e) => {
+            e.preventDefault();
+            uploadArea.classList.add('dragover');
+        });
+
+        uploadArea.addEventListener('dragleave', () => {
+            uploadArea.classList.remove('dragover');
+        });
+
+        uploadArea.addEventListener('drop', (e) => {
+            e.preventDefault();
+            uploadArea.classList.remove('dragover');
+            const files = e.dataTransfer.files;
+            if (files.length > 0) {
+                handleFile(files[0]);
+            }
+        });
+
+        fileInput.addEventListener('change', (e) => {
+            if (e.target.files.length > 0) {
+                handleFile(e.target.files[0]);
+            }
+        });
+
+        async function handleFile(file) {
+            if (!file.type.startsWith('image/')) {
+                showError('请选择图片文件！');
+                return;
+            }
+
+            const sessionId = document.getElementById('sessionId').value.trim() || generateSessionId();
+            currentSessionId = sessionId;
+
+            showProgress(true);
+            updateProgress(10, '准备上传...');
+
+            try {
+                const formData = new FormData();
+                formData.append('image', file);
+                formData.append('sessionId', sessionId);
+
+                updateProgress(30, '正在上传文件...');
+
+                const response = await fetch('/api/ocr-and-process', {
+                    method: 'POST',
+                    body: formData
+                });
+
+                updateProgress(60, '正在识别文档...');
+
+                const data = await response.json();
+
+                updateProgress(100, '识别完成！');
+
+                setTimeout(() => {
+                    showProgress(false);
+                    if (data.success) {
+                        displayResult(data);
+                        hasData = true;
+                        exportBtn.disabled = false;
+                    } else {
+                        showError(data.message || '识别失败，请重试');
+                    }
+                }, 1000);
+
+            } catch (error) {
+                showProgress(false);
+                showError(`处理失败: ${error.message}`);
+            }
+        }
+
+        function displayResult(data) {
+            const { extractedFields, mapping, sessionId, filename } = data;
+
+            let html = `
+                <div class="session-info">
+                    <strong>会话ID:</strong> ${sessionId} | <strong>文件:</strong> ${filename}
+                </div>
+                
+                <div class="extracted-fields">
+            `;
+
+            Object.keys(extractedFields).forEach(key => {
+                const value = extractedFields[key] || '未识别';
+                const mappingInfo = mapping[key] || '';
+                
+                html += `
+                    <div class="field-item">
+                        <div class="field-label">${key}</div>
+                        <div class="field-value">${value}</div>
+                        <div class="field-mapping">→ ${mappingInfo}</div>
+                    </div>
+                `;
+            });
+
+            html += '</div>';
+
+            resultContent.innerHTML = html;
+            result.style.display = 'block';
+            result.classList.remove('error');
+        }
+
+        function showError(message) {
+            resultContent.innerHTML = `<p><strong>错误:</strong> ${message}</p>`;
+            result.style.display = 'block';
+            result.classList.add('error');
+            hasData = false;
+            exportBtn.disabled = true;
+        }
+
+        function showProgress(show) {
+            progress.style.display = show ? 'block' : 'none';
+            if (!show) {
+                updateProgress(0, '');
+            }
+        }
+
+        function updateProgress(percent, text) {
+            progressBar.style.width = percent + '%';
+            progressBar.textContent = text || `${percent}%`;
+        }
+
+        async function exportData() {
+            if (!currentSessionId || !hasData) {
+                showError('没有可导出的数据');
+                return;
+            }
+
+            try {
+                exportBtn.disabled = true;
+                exportBtn.textContent = '正在导出...';
+
+                const response = await fetch(`/api/export/${currentSessionId}`);
+                
+                if (response.ok) {
+                    const blob = await response.blob();
+                    const url = window.URL.createObjectURL(blob);
+                    const a = document.createElement('a');
+                    a.href = url;
+                    a.download = `FileCognize_Export_${currentSessionId}_${new Date().toISOString().slice(0, 19).replace(/:/g, '-')}.xlsx`;
+                    document.body.appendChild(a);
+                    a.click();
+                    document.body.removeChild(a);
+                    window.URL.revokeObjectURL(url);
+                    
+                    const successMsg = document.createElement('div');
+                    successMsg.style.cssText = 'position: fixed; top: 20px; right: 20px; background: #28a745; color: white; padding: 15px; border-radius: 5px; z-index: 1000;';
+                    successMsg.textContent = '✅ Excel文件导出成功！';
+                    document.body.appendChild(successMsg);
+                    setTimeout(() => document.body.removeChild(successMsg), 3000);
+                } else {
+                    const errorData = await response.json();
+                    showError(errorData.message || '导出失败');
+                }
+            } catch (error) {
+                showError(`导出失败: ${error.message}`);
+            } finally {
+                exportBtn.disabled = false;
+                exportBtn.textContent = '📥 导出Excel文件';
+            }
+        }
+
+        function resetForm() {
+            result.style.display = 'none';
+            fileInput.value = '';
+            hasData = false;
+            exportBtn.disabled = true;
+        }
+
+        function generateSessionId() {
+            return 'session_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9);
+        }
+    </script>
+</body>
+</html> 
