@@ -3,84 +3,79 @@
 ## 问题描述
 用户反馈选择"打印文件"后，系统一直卡在"正在准备打印"状态，无法完成打印操作。
 
+## 用户需求澄清
+用户指出打印的文件应该是**填入识别数据的Excel文件（output.xlsx）**，而不是识别结果的HTML预览。
+
 ## 问题分析
 1. **原始实现问题**：尝试直接在iframe中打印Excel文件
 2. **浏览器限制**：浏览器无法直接打印Excel二进制文件
-3. **缺少API端点**：没有获取会话数据的API端点
+3. **功能理解偏差**：误以为需要打印HTML预览，实际需要打印Excel文件
 4. **用户体验差**：长时间等待无响应
 
 ## 解决方案
 
 ### 1. 修改打印策略
-将原来的"打印Excel文件"改为"打印HTML预览"：
+将原来的"直接打印Excel文件"改为"下载Excel文件供用户打印"：
 
 **修复前**：
 ```javascript
-// 尝试直接打印Excel文件 (失败)
+// 尝试直接在iframe中打印Excel文件 (失败)
 const blob = await response.blob();
 const url = URL.createObjectURL(blob);
-iframe.src = url; // Excel文件无法在浏览器中打印
+iframe.src = url; // Excel文件无法在浏览器中直接打印
 ```
 
 **修复后**：
 ```javascript
-// 生成HTML打印预览
-const sessionData = await response.json();
-const printContent = generatePrintHTML(sessionData);
-const printWindow = window.open('', '_blank');
-printWindow.document.write(printContent);
-printWindow.print();
+// 下载填入数据的Excel文件
+const response = await fetch(`/api/export/${currentSessionId}`);
+const blob = await response.blob();
+const url = URL.createObjectURL(blob);
+
+// 自动下载Excel文件
+const a = document.createElement('a');
+a.href = url;
+a.download = `FileCognize_Print_${currentSessionId}.xlsx`;
+a.click();
+
+// 提示用户使用Excel打印功能
+alert('Excel文件已下载！请打开文件并使用Excel的打印功能进行打印');
 ```
 
-### 2. 添加会话数据API
-新增获取特定会话数据的API端点：
+### 2. 利用现有导出API
+直接使用现有的Excel导出功能：
 
 ```javascript
-// 获取特定会话数据API
-app.get('/api/sessions/:sessionId', (req, res) => {
-  const sessionId = req.params.sessionId;
-  const sessionData = global.documentSessions[sessionId];
-  res.json({
-    sessionId: sessionId,
-    documents: sessionData.documents,
-    createdAt: sessionData.createdAt,
-    lastUpdated: sessionData.lastUpdated
-  });
-});
+// 使用现有的导出API获取填入数据的Excel文件
+GET /api/export/:sessionId
 ```
 
-### 3. 生成专业打印格式
-创建格式化的HTML打印模板：
+### 3. 优化用户体验
+提供清晰的操作指引：
 
-```javascript
-function generatePrintHTML(sessionData) {
-  // 生成包含以下内容的HTML：
-  // - 标题和会话信息
-  // - 格式化的数据表格
-  // - 打印样式和页面布局
-  // - 响应式设计支持
-}
-```
+- 自动下载Excel文件
+- 显示操作提示信息
+- 说明后续打印步骤
 
 ## 功能特点
 
 ### 📋 打印内容
-- **文档标题**：FileCognize 文档识别结果
-- **会话信息**：会话ID、生成时间、文档数量
-- **数据表格**：序号、数量、商品描述、单据号、文件名
-- **页脚信息**：生成时间和系统标识
+- **Excel模板**：使用标准的output.xlsx模板
+- **填入数据**：识别的三个关键字段已填入对应位置
+- **完整格式**：保持原有的表格格式和样式
+- **可编辑性**：用户可在Excel中进一步编辑后打印
 
 ### 🎨 打印样式
-- **专业布局**：清晰的表格和分区
-- **打印优化**：专门的@media print样式
-- **响应式设计**：适配不同纸张尺寸
-- **品牌标识**：统一的视觉风格
+- **专业模板**：使用预设的运输单据模板
+- **标准格式**：符合业务需求的表格布局
+- **Excel原生**：利用Excel的专业打印功能
+- **自定义选项**：用户可调整打印设置
 
 ### 🚀 用户体验
-- **快速响应**：不再卡在准备状态
+- **快速下载**：不再卡在准备状态
 - **实时进度**：显示处理进度条
-- **即时预览**：新窗口显示打印内容
-- **自动清理**：打印完成后自动关闭窗口
+- **自动下载**：Excel文件自动保存到下载文件夹
+- **清晰指引**：提示用户后续操作步骤
 
 ## 技术实现
 
@@ -104,15 +99,15 @@ function generatePrintHTML(sessionData) {
 
 ### 修复后
 ```
-用户点击"打印文件" → 显示进度条 → 打开新窗口 → 显示打印预览 → 调用打印对话框 → 完成
+用户点击"打印文件" → 显示进度条 → 下载Excel文件 → 提示用户使用Excel打印 → 完成
 ```
 
 ### 测试验证
-- ✅ API端点正常响应
-- ✅ 会话数据正确获取
-- ✅ HTML内容正确生成
-- ✅ 打印对话框正常弹出
-- ✅ 打印内容格式正确
+- ✅ Excel导出API正常响应
+- ✅ 文件下载功能正常工作
+- ✅ Excel文件格式正确
+- ✅ 数据正确填入模板对应位置
+- ✅ 文件可在Excel中正常打开和打印
 
 ## 兼容性
 

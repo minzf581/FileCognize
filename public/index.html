@@ -643,44 +643,41 @@
                 printBtn.disabled = true;
                 printBtn.textContent = '正在准备打印...';
                 
-                updateProgress(20, '正在生成打印数据...');
+                updateProgress(20, '正在生成Excel文件...');
                 showProgress(true);
 
-                // 获取会话数据用于打印预览
-                const response = await fetch(`/api/sessions/${currentSessionId}`);
+                // 获取填入数据的Excel文件
+                const response = await fetch(`/api/export/${currentSessionId}`);
                 
                 if (!response.ok) {
-                    throw new Error('获取数据失败');
+                    throw new Error('生成Excel文件失败');
                 }
 
-                const sessionData = await response.json();
-                updateProgress(60, '正在生成打印预览...');
+                updateProgress(60, '正在准备打印...');
 
-                // 创建打印预览HTML
-                const printContent = generatePrintHTML(sessionData);
+                const blob = await response.blob();
+                const url = URL.createObjectURL(blob);
                 
-                // 创建新窗口用于打印
-                const printWindow = window.open('', '_blank');
-                printWindow.document.write(printContent);
-                printWindow.document.close();
+                // 创建一个临时链接来下载文件，然后提示用户打印
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = `FileCognize_Print_${currentSessionId}_${new Date().toISOString().slice(0, 19).replace(/:/g, '-')}.xlsx`;
+                document.body.appendChild(a);
+                a.click();
+                document.body.removeChild(a);
                 
-                updateProgress(100, '打印准备完成！');
+                updateProgress(100, '文件已下载！');
                 
                 setTimeout(() => {
                     showProgress(false);
-                    printWindow.print();
+                    URL.revokeObjectURL(url);
                     
-                    // 显示成功消息
-                    const successMsg = document.createElement('div');
-                    successMsg.style.cssText = 'position: fixed; top: 20px; right: 20px; background: #FF9800; color: white; padding: 15px; border-radius: 5px; z-index: 1000;';
-                    successMsg.textContent = '🖨️ 打印任务已发送！';
-                    document.body.appendChild(successMsg);
-                    setTimeout(() => document.body.removeChild(successMsg), 3000);
-                    
-                    // 打印完成后关闭窗口
-                    setTimeout(() => {
-                        printWindow.close();
-                    }, 2000);
+                    // 显示提示消息
+                    const infoMsg = document.createElement('div');
+                    infoMsg.style.cssText = 'position: fixed; top: 20px; right: 20px; background: #2196F3; color: white; padding: 15px; border-radius: 5px; z-index: 1000; max-width: 300px;';
+                    infoMsg.innerHTML = '📥 Excel文件已下载！<br/>💡 请打开文件并使用Excel的打印功能进行打印';
+                    document.body.appendChild(infoMsg);
+                    setTimeout(() => document.body.removeChild(infoMsg), 5000);
                 }, 500);
 
             } catch (error) {
@@ -692,116 +689,7 @@
             }
         }
 
-        // 生成打印HTML内容
-        function generatePrintHTML(sessionData) {
-            const documents = sessionData.documents || [];
-            const timestamp = new Date().toLocaleString('zh-CN');
-            
-            let tableRows = '';
-            documents.forEach((doc, index) => {
-                const data = doc.extractedData || {};
-                tableRows += `
-                    <tr>
-                        <td>${index + 1}</td>
-                        <td>${data['Quantita'] || ''}</td>
-                        <td>${data['Descrizione Articolo'] || ''}</td>
-                        <td>${data['Numero Documento'] || ''}</td>
-                        <td>${doc.filename || ''}</td>
-                    </tr>
-                `;
-            });
 
-            return `
-                <!DOCTYPE html>
-                <html>
-                <head>
-                    <meta charset="UTF-8">
-                    <title>FileCognize 识别结果</title>
-                    <style>
-                        @media print {
-                            body { margin: 0; }
-                            .no-print { display: none; }
-                        }
-                        body {
-                            font-family: Arial, sans-serif;
-                            margin: 20px;
-                            line-height: 1.4;
-                        }
-                        .header {
-                            text-align: center;
-                            margin-bottom: 30px;
-                            border-bottom: 2px solid #333;
-                            padding-bottom: 10px;
-                        }
-                        .header h1 {
-                            margin: 0;
-                            color: #333;
-                        }
-                        .info {
-                            margin-bottom: 20px;
-                            font-size: 14px;
-                            color: #666;
-                        }
-                        table {
-                            width: 100%;
-                            border-collapse: collapse;
-                            margin-bottom: 20px;
-                        }
-                        th, td {
-                            border: 1px solid #ddd;
-                            padding: 8px;
-                            text-align: left;
-                        }
-                        th {
-                            background-color: #f5f5f5;
-                            font-weight: bold;
-                        }
-                        tr:nth-child(even) {
-                            background-color: #f9f9f9;
-                        }
-                        .footer {
-                            margin-top: 30px;
-                            text-align: center;
-                            font-size: 12px;
-                            color: #999;
-                            border-top: 1px solid #ddd;
-                            padding-top: 10px;
-                        }
-                    </style>
-                </head>
-                <body>
-                    <div class="header">
-                        <h1>📋 FileCognize 文档识别结果</h1>
-                    </div>
-                    
-                    <div class="info">
-                        <p><strong>会话ID:</strong> ${sessionData.sessionId || currentSessionId}</p>
-                        <p><strong>生成时间:</strong> ${timestamp}</p>
-                        <p><strong>文档数量:</strong> ${documents.length} 个</p>
-                    </div>
-
-                    <table>
-                        <thead>
-                            <tr>
-                                <th>序号</th>
-                                <th>数量 (QUANTITA)</th>
-                                <th>商品描述 (DESCRIZIONE DEI BENI)</th>
-                                <th>单据号 (IMPORTO)</th>
-                                <th>文件名</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            ${tableRows}
-                        </tbody>
-                    </table>
-
-                    <div class="footer">
-                        <p>由 FileCognize 文档识别系统生成 | ${timestamp}</p>
-                    </div>
-                </body>
-                </html>
-            `;
-        }
     </script>
 </body>
 </html> 
