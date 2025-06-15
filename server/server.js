@@ -9,8 +9,107 @@ const pdfParse = require('pdf-parse');
 // pdf-to-img将在需要时动态导入
 const XLSX = require('xlsx');
 const ExcelJS = require('exceljs'); // 添加ExcelJS库以更好地保持格式
+// 移除libreoffice-convert库，改用命令行方式
+const { promisify } = require('util');
 const { ocrService, DESCRIZIONE_OPTIONS } = require('./ocr-service');
 require('dotenv').config();
+
+// Excel到PDF转换函数
+async function convertExcelToPDF(excelPath, pdfPath) {
+  try {
+    console.log(`📄 开始将Excel转换为PDF: ${excelPath} -> ${pdfPath}`);
+    
+    // 首先尝试修复Excel文件中的字体设置
+    await fixExcelFonts(excelPath);
+    
+    // 使用命令行方式调用LibreOffice，确保字符编码正确
+    const { exec } = require('child_process');
+    const { promisify } = require('util');
+    const execAsync = promisify(exec);
+    
+    // 构建LibreOffice命令，设置环境变量确保字体正确
+    const outputDir = path.dirname(pdfPath);
+    
+    // 设置环境变量以确保字体正确显示
+    const env = {
+      ...process.env,
+      'LC_ALL': 'en_US.UTF-8',
+      'LANG': 'en_US.UTF-8',
+      'SAL_USE_VCLPLUGIN': 'gen'
+    };
+    
+    const command = `/Applications/LibreOffice.app/Contents/MacOS/soffice --headless --convert-to pdf --outdir "${outputDir}" "${excelPath}"`;
+    
+    console.log(`🔧 执行命令: ${command}`);
+    console.log(`📁 输出目录: ${outputDir}`);
+    console.log(`📄 输入文件: ${excelPath}`);
+    
+    // 执行转换命令，使用设置的环境变量
+    const { stdout, stderr } = await execAsync(command, { env });
+    
+    if (stderr) {
+      console.log(`⚠️ LibreOffice警告: ${stderr}`);
+    }
+    
+    if (stdout) {
+      console.log(`📝 LibreOffice输出: ${stdout}`);
+    }
+    
+    // 检查PDF文件是否生成成功
+    const expectedPdfPath = path.join(outputDir, path.basename(excelPath, path.extname(excelPath)) + '.pdf');
+    
+    if (fs.existsSync(expectedPdfPath)) {
+      // 如果生成的PDF文件名与期望的不同，重命名它
+      if (expectedPdfPath !== pdfPath) {
+        fs.renameSync(expectedPdfPath, pdfPath);
+      }
+      console.log(`✅ Excel转PDF完成: ${pdfPath}`);
+      return true;
+    } else {
+      throw new Error('PDF文件生成失败');
+    }
+    
+  } catch (error) {
+    console.error('❌ Excel转PDF失败:', error);
+    throw error;
+  }
+}
+
+// 修复Excel文件中的字体设置
+async function fixExcelFonts(excelPath) {
+  try {
+    console.log(`🔧 修复Excel文件字体设置: ${excelPath}`);
+    
+    const workbook = new ExcelJS.Workbook();
+    await workbook.xlsx.readFile(excelPath);
+    
+    // 遍历所有工作表
+    workbook.eachSheet((worksheet) => {
+      // 遍历所有行
+      worksheet.eachRow((row) => {
+        // 遍历所有单元格
+        row.eachCell((cell) => {
+          if (cell.value && typeof cell.value === 'string') {
+            // 设置字体为支持中文的字体
+            cell.font = {
+              name: 'Arial Unicode MS', // 支持多语言的字体
+              size: cell.font?.size || 11,
+              bold: cell.font?.bold || false,
+              italic: cell.font?.italic || false
+            };
+          }
+        });
+      });
+    });
+    
+    // 保存修改后的文件
+    await workbook.xlsx.writeFile(excelPath);
+    console.log(`✅ Excel字体设置修复完成`);
+    
+  } catch (error) {
+    console.log(`⚠️ Excel字体修复失败，继续使用原文件: ${error.message}`);
+  }
+}
 
 // 全局错误处理 - 防止进程崩溃
 process.on('uncaughtException', (error) => {
@@ -1563,8 +1662,8 @@ app.post('/api/export-selected', async (req, res) => {
   }
 });
 
-// 打印HTML预览 - 基于output.xlsx模板 + 会话数据
-app.get('/api/print/:sessionId', (req, res) => {
+// 打印PDF预览 - 基于output.xlsx模板 + 会话数据，先导出Excel再转PDF
+app.get('/api/print/:sessionId', async (req, res) => {
   try {
     const sessionId = req.params.sessionId;
     const sessionData = global.documentSessions?.[sessionId];
@@ -1576,297 +1675,76 @@ app.get('/api/print/:sessionId', (req, res) => {
       });
     }
 
-    console.log(`🖨️ 开始准备HTML打印预览会话 ${sessionId} 的数据...`);
+    console.log(`🖨️ 开始准备PDF打印会话 ${sessionId} 的数据...`);
 
-    // 生成HTML打印内容，完全基于output.xlsx模板结构
-    let printHTML = `
-    <!DOCTYPE html>
-    <html>
-    <head>
-        <meta charset="UTF-8">
-        <title>FileCognize 打印预览 - 完整文档</title>
-        <style>
-            @media print {
-                body { margin: 0; }
-                .no-print { display: none; }
-                .document-container { margin: 0; padding: 15mm; }
-            }
-            body {
-                font-family: Arial, sans-serif;
-                margin: 0;
-                background: white;
-                font-size: 11px;
-                line-height: 1.2;
-            }
-            .no-print {
-                position: fixed;
-                top: 10px;
-                right: 10px;
-                z-index: 1000;
-                background: rgba(255,255,255,0.9);
-                padding: 10px;
-                border-radius: 5px;
-                box-shadow: 0 2px 10px rgba(0,0,0,0.1);
-            }
-            .print-button {
-                background: #007bff;
-                color: white;
-                border: none;
-                padding: 8px 16px;
-                border-radius: 4px;
-                cursor: pointer;
-                margin: 0 5px;
-                font-size: 12px;
-            }
-            .print-button:hover {
-                background: #0056b3;
-            }
-            .document-container {
-                max-width: 210mm;
-                margin: 0 auto;
-                padding: 15mm;
-                background: white;
-                min-height: 297mm;
-            }
-            .document-header {
-                display: grid;
-                grid-template-columns: 1fr 1fr;
-                gap: 15px;
-                margin-bottom: 15px;
-                border: 2px solid #000;
-                padding: 8px;
-            }
-            .sender-info, .doc-info {
-                padding: 8px;
-                border: 1px solid #000;
-                font-size: 10px;
-            }
-            .recipient-info, .destination-info {
-                margin: 8px 0;
-                padding: 8px;
-                border: 1px solid #000;
-                min-height: 60px;
-                font-size: 10px;
-            }
-            .transport-info {
-                margin: 8px 0;
-                padding: 8px;
-                border: 1px solid #000;
-                font-size: 10px;
-            }
-            .items-table {
-                width: 100%;
-                border-collapse: collapse;
-                margin: 15px 0;
-                border: 2px solid #000;
-            }
-            .items-table th,
-            .items-table td {
-                border: 1px solid #000;
-                padding: 4px;
-                text-align: left;
-                vertical-align: top;
-                font-size: 9px;
-                height: 20px;
-            }
-            .items-table th {
-                background-color: #f0f0f0;
-                font-weight: bold;
-                text-align: center;
-                font-size: 8px;
-            }
-            .footer-section {
-                display: grid;
-                grid-template-columns: 1fr 1fr 1fr;
-                gap: 8px;
-                margin-top: 15px;
-                border: 1px solid #000;
-                padding: 8px;
-                font-size: 9px;
-            }
-            .signature-section {
-                text-align: center;
-                padding: 15px;
-                border: 1px solid #000;
-                margin: 8px 0;
-                font-size: 10px;
-            }
-            .filled-data {
-                background-color: #ffffcc;
-                font-weight: bold;
-            }
-            .company-header {
-                text-align: center;
-                font-weight: bold;
-                font-size: 12px;
-                margin-bottom: 10px;
-            }
-        </style>
-    </head>
-    <body>
-        <div class="no-print">
-            <button class="print-button" onclick="window.print()">🖨️ 打印</button>
-            <button class="print-button" onclick="window.close()">❌ 关闭</button>
-        </div>
-        
-        <div class="document-container">
-            <!-- 公司标题 -->
-            <div class="company-header">
-                CONFEZIONE MIRA di Jiang Meizhu
-            </div>
-            
-            <!-- 文档头部 -->
-            <div class="document-header">
-                <div class="sender-info">
-                    <strong>MITTENTE:</strong><br>
-                    Meoni & Ciampalini s.p.a.<br>
-                    RAPPRESENTANZE CON DEPOSITO E COMMERCIO<br>
-                    ACCESSORI PER CONFEZIONE<br>
-                    50053 EMPOLI (Firenze) - Via Reali, 32/34<br>
-                    Zona Industriale Terrafino<br>
-                    Tel: 0571.930067 - Fax: 0571.930161<br>
-                    e-mail: info@meoniciampalini.it
-                </div>
-                <div class="doc-info">
-                    <strong>DOCUMENTO DI TRASPORTO</strong><br>
-                    N. ${sessionData.documents[0]?.extractedData?.['Numero Documento'] || '549/88'}<br>
-                    del ${new Date().toLocaleDateString('it-IT')}
-                </div>
-            </div>
-            
-            <!-- 收件人信息 -->
-            <div class="recipient-info">
-                <strong>Spett.le:</strong><br>
-                CONFEZIONE APOLLO DI CHEN DONGPING<br>
-                VIA DEL CASTELLUCCIO, 38<br>
-                50053 EMPOLI (FI)
-            </div>
-            
-            <!-- 目的地信息 -->
-            <div class="destination-info">
-                <strong>Luogo di Destinazione dei Beni:</strong><br>
-                IDEM
-            </div>
-            
-            <!-- 运输原因 -->
-            <div class="transport-info">
-                <strong>Causale del Trasporto:</strong> VENDITA
-            </div>
-            
-            <!-- 物品表格 -->
-            <table class="items-table">
-                <thead>
-                    <tr>
-                        <th style="width: 15%;">QUANTITA</th>
-                        <th colspan="5" style="width: 70%;">DESCRIZIONE DEI BENI (natura e qualita)</th>
-                        <th style="width: 15%;">IMPORTO (*)</th>
-                    </tr>
-                </thead>
-                <tbody>`;
+    // 读取output.xlsx模板
+    const templatePath = path.join(__dirname, '..', 'output.xlsx');
+    if (!fs.existsSync(templatePath)) {
+      throw new Error('找不到output.xlsx模板文件');
+    }
 
-    // 添加会话数据行
-    sessionData.documents.forEach((item, index) => {
-      if (item.extractedData) {
-        const quantita = item.extractedData['Quantita'] || '';
-        const descrizione = item.extractedData['Descrizione Articolo'] || '';
-        const numeroDoc = item.extractedData['Numero Documento'] || '';
+    // 生成临时Excel文件路径
+    const timestamp = new Date().toISOString().slice(0, 19).replace(/:/g, '-');
+    const tempExcelFilename = `Print_Session_${sessionId}_${timestamp}.xlsx`;
+    const tempExcelPath = path.join(__dirname, 'exports', tempExcelFilename);
+    
+    // 生成PDF文件路径
+    const pdfFilename = `Print_Session_${sessionId}_${timestamp}.pdf`;
+    const pdfPath = path.join(__dirname, 'exports', pdfFilename);
+    
+    // 确保exports目录存在
+    const exportsDir = path.join(__dirname, 'exports');
+    if (!fs.existsSync(exportsDir)) {
+      fs.mkdirSync(exportsDir, { recursive: true });
+    }
+
+    // 使用ExcelJS导出会话数据到Excel
+    await exportSessionWithExcelJS(templatePath, tempExcelPath, sessionData);
+    
+    // 将Excel转换为PDF
+    await convertExcelToPDF(tempExcelPath, pdfPath);
+    
+    // 设置响应头为PDF文件
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader('Content-Disposition', `inline; filename="${pdfFilename}"`);
+    
+    // 发送PDF文件
+    res.sendFile(pdfPath, (err) => {
+      if (err) {
+        console.error('PDF文件发送失败:', err);
+        res.status(500).json({ success: false, message: 'PDF文件发送失败' });
+      } else {
+        console.log(`📤 PDF打印文件发送成功: ${pdfFilename}`);
         
-        printHTML += `
-                    <tr>
-                        <td class="filled-data">${quantita}</td>
-                        <td colspan="5" class="filled-data">${descrizione}</td>
-                        <td class="filled-data">${numeroDoc}</td>
-                    </tr>`;
+        // 延迟删除临时文件
+        setTimeout(() => {
+          try {
+            if (fs.existsSync(tempExcelPath)) {
+              fs.unlinkSync(tempExcelPath);
+              console.log(`🗑️ 临时Excel文件已删除: ${tempExcelFilename}`);
+            }
+            if (fs.existsSync(pdfPath)) {
+              fs.unlinkSync(pdfPath);
+              console.log(`🗑️ 临时PDF文件已删除: ${pdfFilename}`);
+            }
+          } catch (deleteErr) {
+            console.error('删除临时文件失败:', deleteErr);
+          }
+        }, 60000); // 60秒后删除，给用户足够时间查看
       }
     });
 
-    // 添加空行以匹配模板格式（总共20行）
-    const totalRows = 20;
-    const filledRows = sessionData.documents.length;
-    for (let i = filledRows; i < totalRows; i++) {
-      printHTML += `
-                    <tr>
-                        <td>&nbsp;</td>
-                        <td colspan="5">&nbsp;</td>
-                        <td>&nbsp;</td>
-                    </tr>`;
-    }
-
-    printHTML += `
-                </tbody>
-            </table>
-            
-            <!-- 底部信息 -->
-            <div class="footer-section">
-                <div>
-                    <strong>ASPETTO ESTERIORE DEI BENI</strong><br>
-                    <div style="height: 30px; border: 1px solid #000; margin-top: 5px;"></div>
-                </div>
-                <div>
-                    <strong>N. COLLI</strong><br>
-                    <div style="height: 30px; border: 1px solid #000; margin-top: 5px;"></div>
-                </div>
-                <div>
-                    <strong>PORTO</strong><br>
-                    <div style="height: 30px; border: 1px solid #000; margin-top: 5px;"></div>
-                </div>
-            </div>
-            
-            <!-- 签名区域 -->
-            <div class="signature-section">
-                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 20px;">
-                    <div>
-                        <strong>FIRMA DEL MITTENTE</strong><br>
-                        <div style="height: 50px; border-bottom: 1px solid #000; margin-top: 15px;"></div>
-                    </div>
-                    <div>
-                        <strong>FIRMA DEL DESTINATARIO</strong><br>
-                        <div style="height: 50px; border-bottom: 1px solid #000; margin-top: 15px;"></div>
-                    </div>
-                </div>
-            </div>
-            
-            <!-- 注释 -->
-            <div style="margin-top: 15px; font-size: 9px; color: #666;">
-                <p><strong>注释:</strong> 黄色高亮部分为系统自动识别填入的数据</p>
-                <p><strong>会话记录数:</strong> ${sessionData.documents.length} 个 | 
-                   <strong>此打印预览与导出的Excel文件内容完全一致</strong></p>
-            </div>
-        </div>
-
-        <script>
-            // 自动聚焦以便快捷键打印
-            window.focus();
-            
-            // 支持Ctrl+P快捷键
-            document.addEventListener('keydown', function(e) {
-                if (e.ctrlKey && e.key === 'p') {
-                    e.preventDefault();
-                    window.print();
-                }
-            });
-        </script>
-    </body>
-    </html>`;
-
-    console.log(`✅ HTML打印预览准备完成`);
-    console.log(`📊 包含 ${sessionData.documents.length} 条记录`);
-
-    // 返回HTML内容
-    res.setHeader('Content-Type', 'text/html; charset=utf-8');
-    res.send(printHTML);
-
   } catch (error) {
-    console.error('打印预览准备失败:', error);
+    console.error('PDF打印准备失败:', error);
     res.status(500).json({ 
       success: false, 
-      message: '打印预览准备失败: ' + error.message 
+      message: 'PDF打印准备失败: ' + error.message 
     });
   }
 });
 
-// 打印选中记录 - 与导出选中记录完全一致的打印预览
-app.post('/api/print-selected', (req, res) => {
+// 打印选中记录 - 将Excel导出转PDF打印，与导出的Excel文件格式完全一致
+app.post('/api/print-selected', async (req, res) => {
   try {
     const { sessionId, records } = req.body;
     
@@ -1877,300 +1755,213 @@ app.post('/api/print-selected', (req, res) => {
       });
     }
 
-    console.log(`🖨️ 开始准备打印选中的 ${records.length} 条记录...`);
+    console.log(`🖨️ 开始准备PDF打印选中的 ${records.length} 条记录...`);
 
-    // 获取第一条记录的文档号用于文档头部
-    let firstNumeroDocumento = '549/88'; // 默认值
-    if (records.length > 0 && records[0].extractedFields && records[0].extractedFields['Numero Documento']) {
-      firstNumeroDocumento = records[0].extractedFields['Numero Documento'];
+    // 读取output.xlsx模板
+    const templatePath = path.join(__dirname, '..', 'output.xlsx');
+    if (!fs.existsSync(templatePath)) {
+      throw new Error('找不到output.xlsx模板文件');
     }
 
-    // 生成HTML打印内容，完全基于output.xlsx模板结构
-    let printHTML = `
-    <!DOCTYPE html>
-    <html>
-    <head>
-        <meta charset="UTF-8">
-        <title>FileCognize 打印预览 - 选中记录</title>
-        <style>
-            @media print {
-                body { margin: 0; }
-                .no-print { display: none; }
-                .document-container { margin: 0; padding: 15mm; }
-            }
-            body {
-                font-family: Arial, sans-serif;
-                margin: 0;
-                background: white;
-                font-size: 11px;
-                line-height: 1.2;
-            }
-            .no-print {
-                position: fixed;
-                top: 10px;
-                right: 10px;
-                z-index: 1000;
-                background: rgba(255,255,255,0.9);
-                padding: 10px;
-                border-radius: 5px;
-                box-shadow: 0 2px 10px rgba(0,0,0,0.1);
-            }
-            .print-button {
-                background: #007bff;
-                color: white;
-                border: none;
-                padding: 8px 16px;
-                border-radius: 4px;
-                cursor: pointer;
-                margin: 0 5px;
-                font-size: 12px;
-            }
-            .print-button:hover {
-                background: #0056b3;
-            }
-            .document-container {
-                max-width: 210mm;
-                margin: 0 auto;
-                padding: 15mm;
-                background: white;
-                min-height: 297mm;
-            }
-            .document-header {
-                display: grid;
-                grid-template-columns: 1fr 1fr;
-                gap: 15px;
-                margin-bottom: 15px;
-                border: 2px solid #000;
-                padding: 8px;
-            }
-            .sender-info, .doc-info {
-                padding: 8px;
-                border: 1px solid #000;
-                font-size: 10px;
-            }
-            .recipient-info, .destination-info {
-                margin: 8px 0;
-                padding: 8px;
-                border: 1px solid #000;
-                min-height: 60px;
-                font-size: 10px;
-            }
-            .transport-info {
-                margin: 8px 0;
-                padding: 8px;
-                border: 1px solid #000;
-                font-size: 10px;
-            }
-            .items-table {
-                width: 100%;
-                border-collapse: collapse;
-                margin: 15px 0;
-                border: 2px solid #000;
-            }
-            .items-table th,
-            .items-table td {
-                border: 1px solid #000;
-                padding: 4px;
-                text-align: left;
-                vertical-align: top;
-                font-size: 9px;
-                height: 20px;
-            }
-            .items-table th {
-                background-color: #f0f0f0;
-                font-weight: bold;
-                text-align: center;
-                font-size: 8px;
-            }
-            .footer-section {
-                display: grid;
-                grid-template-columns: 1fr 1fr 1fr;
-                gap: 8px;
-                margin-top: 15px;
-                border: 1px solid #000;
-                padding: 8px;
-                font-size: 9px;
-            }
-            .signature-section {
-                text-align: center;
-                padding: 15px;
-                border: 1px solid #000;
-                margin: 8px 0;
-                font-size: 10px;
-            }
-            .filled-data {
-                background-color: #ffffcc;
-                font-weight: bold;
-            }
-            .company-header {
-                text-align: center;
-                font-weight: bold;
-                font-size: 12px;
-                margin-bottom: 10px;
-            }
-        </style>
-    </head>
-    <body>
-        <div class="no-print">
-            <button class="print-button" onclick="window.print()">🖨️ 打印</button>
-            <button class="print-button" onclick="window.close()">❌ 关闭</button>
-        </div>
-        
-        <div class="document-container">
-            <!-- 公司标题 -->
-            <div class="company-header">
-                CONFEZIONE MIRA di Jiang Meizhu
-            </div>
-            
-            <!-- 文档头部 -->
-            <div class="document-header">
-                <div class="sender-info">
-                    <strong>MITTENTE:</strong><br>
-                    Meoni & Ciampalini s.p.a.<br>
-                    RAPPRESENTANZE CON DEPOSITO E COMMERCIO<br>
-                    ACCESSORI PER CONFEZIONE<br>
-                    50053 EMPOLI (Firenze) - Via Reali, 32/34<br>
-                    Zona Industriale Terrafino<br>
-                    Tel: 0571.930067 - Fax: 0571.930161<br>
-                    e-mail: info@meoniciampalini.it
-                </div>
-                <div class="doc-info">
-                    <strong>DOCUMENTO DI TRASPORTO</strong><br>
-                    N. ${firstNumeroDocumento}<br>
-                    del ${new Date().toLocaleDateString('it-IT')}
-                </div>
-            </div>
-            
-            <!-- 收件人信息 -->
-            <div class="recipient-info">
-                <strong>Spett.le:</strong><br>
-                CONFEZIONE APOLLO DI CHEN DONGPING<br>
-                VIA DEL CASTELLUCCIO, 38<br>
-                50053 EMPOLI (FI)
-            </div>
-            
-            <!-- 目的地信息 -->
-            <div class="destination-info">
-                <strong>Luogo di Destinazione dei Beni:</strong><br>
-                IDEM
-            </div>
-            
-            <!-- 运输原因 -->
-            <div class="transport-info">
-                <strong>Causale del Trasporto:</strong> VENDITA
-            </div>
-            
-            <!-- 物品表格 -->
-            <table class="items-table">
-                <thead>
-                    <tr>
-                        <th style="width: 15%;">QUANTITA</th>
-                        <th colspan="5" style="width: 70%;">DESCRIZIONE DEI BENI (natura e qualita)</th>
-                        <th style="width: 15%;">IMPORTO (*)</th>
-                    </tr>
-                </thead>
-                <tbody>`;
+    // 生成临时Excel文件路径
+    const timestamp = new Date().toISOString().slice(0, 19).replace(/:/g, '-');
+    const tempExcelFilename = `Print_Selected_${timestamp}.xlsx`;
+    const tempExcelPath = path.join(__dirname, 'exports', tempExcelFilename);
+    
+    // 生成PDF文件路径
+    const pdfFilename = `Print_Selected_${timestamp}.pdf`;
+    const pdfPath = path.join(__dirname, 'exports', pdfFilename);
+    
+    // 确保exports目录存在
+    const exportsDir = path.join(__dirname, 'exports');
+    if (!fs.existsSync(exportsDir)) {
+      fs.mkdirSync(exportsDir, { recursive: true });
+    }
 
-    // 添加选中记录的数据行
-    records.forEach((record, index) => {
-      if (record.extractedFields) {
-        const quantita = record.extractedFields['Quantita'] || '';
-        const descrizione = record.extractedFields['Descrizione Articolo'] || '';
-        const numeroDoc = record.extractedFields['Numero Documento'] || '';
+    // 使用ExcelJS导出选中记录到Excel
+    await exportSelectedWithExcelJS(templatePath, tempExcelPath, records);
+    
+    // 将Excel转换为PDF
+    await convertExcelToPDF(tempExcelPath, pdfPath);
+    
+    console.log(`✅ PDF打印文件准备完成: ${pdfPath}`);
+    
+    // 设置响应头为PDF文件
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader('Content-Disposition', `inline; filename="${pdfFilename}"`);
+    
+    // 发送PDF文件
+    res.sendFile(pdfPath, (err) => {
+      if (err) {
+        console.error('PDF文件发送失败:', err);
+        res.status(500).json({ success: false, message: 'PDF文件发送失败' });
+      } else {
+        console.log(`📤 PDF打印文件发送成功: ${pdfFilename}`);
+        console.log(`📊 包含 ${records.length} 条选中记录`);
         
-        printHTML += `
-                    <tr>
-                        <td class="filled-data">${quantita}</td>
-                        <td colspan="5" class="filled-data">${descrizione}</td>
-                        <td class="filled-data">${numeroDoc}</td>
-                    </tr>`;
+        // 延迟删除临时文件
+        setTimeout(() => {
+          try {
+            if (fs.existsSync(tempExcelPath)) {
+              fs.unlinkSync(tempExcelPath);
+              console.log(`🗑️ 临时Excel文件已删除: ${tempExcelFilename}`);
+            }
+            if (fs.existsSync(pdfPath)) {
+              fs.unlinkSync(pdfPath);
+              console.log(`🗑️ 临时PDF文件已删除: ${pdfFilename}`);
+            }
+          } catch (deleteErr) {
+            console.error('删除临时文件失败:', deleteErr);
+          }
+        }, 60000); // 60秒后删除，给用户足够时间查看
       }
     });
 
-    // 添加空行以匹配模板格式（总共20行）
-    const totalRows = 20;
-    const filledRows = records.length;
-    for (let i = filledRows; i < totalRows; i++) {
-      printHTML += `
-                    <tr>
-                        <td>&nbsp;</td>
-                        <td colspan="5">&nbsp;</td>
-                        <td>&nbsp;</td>
-                    </tr>`;
-    }
-
-    printHTML += `
-                </tbody>
-            </table>
-            
-            <!-- 底部信息 -->
-            <div class="footer-section">
-                <div>
-                    <strong>ASPETTO ESTERIORE DEI BENI</strong><br>
-                    <div style="height: 30px; border: 1px solid #000; margin-top: 5px;"></div>
-                </div>
-                <div>
-                    <strong>N. COLLI</strong><br>
-                    <div style="height: 30px; border: 1px solid #000; margin-top: 5px;"></div>
-                </div>
-                <div>
-                    <strong>PORTO</strong><br>
-                    <div style="height: 30px; border: 1px solid #000; margin-top: 5px;"></div>
-                </div>
-            </div>
-            
-            <!-- 签名区域 -->
-            <div class="signature-section">
-                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 20px;">
-                    <div>
-                        <strong>FIRMA DEL MITTENTE</strong><br>
-                        <div style="height: 50px; border-bottom: 1px solid #000; margin-top: 15px;"></div>
-                    </div>
-                    <div>
-                        <strong>FIRMA DEL DESTINATARIO</strong><br>
-                        <div style="height: 50px; border-bottom: 1px solid #000; margin-top: 15px;"></div>
-                    </div>
-                </div>
-            </div>
-            
-            <!-- 注释 -->
-            <div style="margin-top: 15px; font-size: 9px; color: #666;">
-                <p><strong>注释:</strong> 黄色高亮部分为系统自动识别填入的数据</p>
-                <p><strong>选中记录数:</strong> ${records.length} 个 | 
-                   <strong>此打印预览与导出的Excel文件内容完全一致</strong></p>
-            </div>
-        </div>
-
-        <script>
-            // 自动聚焦以便快捷键打印
-            window.focus();
-            
-            // 支持Ctrl+P快捷键
-            document.addEventListener('keydown', function(e) {
-                if (e.ctrlKey && e.key === 'p') {
-                    e.preventDefault();
-                    window.print();
-                }
-            });
-        </script>
-    </body>
-    </html>`;
-
-    console.log(`✅ HTML打印预览准备完成`);
-    console.log(`📊 包含 ${records.length} 条选中记录`);
-
-    // 返回HTML内容
-    res.setHeader('Content-Type', 'text/html; charset=utf-8');
-    res.send(printHTML);
-
   } catch (error) {
-    console.error('打印预览准备失败:', error);
+    console.error('PDF打印准备失败:', error);
     res.status(500).json({ 
       success: false, 
-      message: '打印预览准备失败: ' + error.message 
+      message: 'PDF打印准备失败: ' + error.message 
     });
   }
 });
+
+// 下载打印文件API (保持向后兼容)
+app.get('/api/download-print/:filename', (req, res) => {
+  try {
+    const filename = req.params.filename;
+    const filePath = path.join(__dirname, 'exports', filename);
+    
+    if (!fs.existsSync(filePath)) {
+      return res.status(404).json({ error: '打印文件不存在' });
+    }
+    
+    // 设置响应头，让浏览器直接打开文件用于打印
+    const ext = path.extname(filename).toLowerCase();
+    if (ext === '.pdf') {
+      res.setHeader('Content-Type', 'application/pdf');
+    } else {
+      res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+    }
+    res.setHeader('Content-Disposition', `inline; filename="${filename}"`);
+    
+    // 发送文件
+    res.sendFile(filePath, (err) => {
+      if (!err) {
+        // 文件发送完成后延迟删除临时文件
+        setTimeout(() => {
+          try {
+            fs.unlinkSync(filePath);
+            console.log(`🗑️ 打印临时文件已删除: ${filename}`);
+          } catch (deleteErr) {
+            console.error('删除打印临时文件失败:', deleteErr);
+          }
+        }, 30000); // 30秒后删除，给用户足够时间打印
+      }
+    });
+    
+  } catch (error) {
+    console.error('下载打印文件错误:', error);
+    res.status(500).json({ error: '下载打印文件失败' });
+  }
+});
+
+// 文件下载API
+app.get('/api/download/:filename', (req, res) => {
+  try {
+    const filename = req.params.filename;
+    const filePath = path.join(uploadsDir, filename);
+    
+    if (!fs.existsSync(filePath)) {
+      return res.status(404).json({ error: '文件不存在' });
+    }
+    
+    // 设置下载头
+    res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+    res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+    
+    // 发送文件
+    res.sendFile(filePath);
+    
+  } catch (error) {
+    console.error('文件下载错误:', error);
+    res.status(500).json({ error: '文件下载失败' });
+  }
+});
+
+// 删除模板API
+app.delete('/api/templates/:filename', (req, res) => {
+  try {
+    const filename = req.params.filename;
+    
+    // 不允许删除缺省模板
+    if (filename === 'default_template') {
+      return res.status(400).json({ error: '不能删除缺省模板' });
+    }
+    
+    const filePath = path.join(templatesDir, filename);
+    const configPath = path.join(templatesDir, `${filename}_config.json`);
+    
+    let deleted = false;
+    
+    // 删除模板文件
+    if (fs.existsSync(filePath)) {
+      fs.unlinkSync(filePath);
+      deleted = true;
+    }
+    
+    // 删除配置文件
+    if (fs.existsSync(configPath)) {
+      fs.unlinkSync(configPath);
+      deleted = true;
+    }
+    
+    if (deleted) {
+      res.json({ success: true, message: '模板删除成功' });
+    } else {
+      res.status(404).json({ error: '模板文件不存在' });
+    }
+  } catch (error) {
+    console.error('删除模板错误:', error);
+    res.status(500).json({ error: '删除模板失败' });
+  }
+});
+
+// 健康检查端点
+app.get('/api/health', (req, res) => {
+  res.json({ status: 'OK', timestamp: new Date().toISOString() });
+});
+
+// 调试端点 - 检查文件路径
+app.get('/api/debug/paths', (req, res) => {
+  const paths = {
+    __dirname: __dirname,
+    'process.cwd()': process.cwd(),
+    'NODE_ENV': process.env.NODE_ENV,
+    'PORT': process.env.PORT,
+    publicPaths: [
+      path.join(__dirname, '../public'),
+      path.join(process.cwd(), 'public'),
+      path.join(__dirname, '../../public'),
+      '/app/public'
+    ].map(p => ({
+      path: p,
+      exists: fs.existsSync(p),
+      indexExists: fs.existsSync(path.join(p, 'index.html'))
+    })),
+    buildPaths: [
+      path.join(__dirname, '../build'),
+      path.join(__dirname, '../client/build')
+    ].map(p => ({
+      path: p,
+      exists: fs.existsSync(p),
+      indexExists: fs.existsSync(path.join(p, 'index.html'))
+    }))
+  };
+  
+  res.json(paths);
+});
+
 
 // 下载打印文件API
 app.get('/api/download-print/:filename', (req, res) => {

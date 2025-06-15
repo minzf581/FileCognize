@@ -895,18 +895,21 @@
                 });
 
                 if (response.ok) {
-                    const htmlContent = await response.text();
-                    const printWindow = window.open('', '_blank');
-                    printWindow.document.write(htmlContent);
-                    printWindow.document.close();
-                    printWindow.focus();
+                    // 获取PDF文件的blob数据
+                    const pdfBlob = await response.blob();
                     
-                    // 等待内容加载完成后打印
+                    // 创建PDF文件的URL
+                    const pdfUrl = URL.createObjectURL(pdfBlob);
+                    
+                    // 在新窗口中打开PDF文件
+                    const printWindow = window.open(pdfUrl, '_blank');
+                    
+                    // 清理URL对象（延迟清理，确保PDF已加载）
                     setTimeout(() => {
-                        printWindow.print();
-                    }, 1000);
+                        URL.revokeObjectURL(pdfUrl);
+                    }, 10000);
                     
-                    showMessage(`成功准备打印 ${selectedIds.length} 条记录！`, 'success');
+                    showMessage(`成功准备打印 ${selectedIds.length} 条记录！PDF文件已在新窗口中打开`, 'success');
                 } else {
                     throw new Error('打印准备失败');
                 }
