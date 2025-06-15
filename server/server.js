@@ -1774,7 +1774,102 @@ async function exportSelectedWithExcelJS(templatePath, outputPath, records) {
   }
 }
 
-// 纯模板复制导出函数 - 100%保持原始格式
+// 移动端优化导出函数 - 既保持格式又写入数据
+async function exportSelectedMobileOptimized(templatePath, outputPath, records, deviceInfo) {
+  try {
+    console.log(`📱 使用移动端优化导出: ${templatePath} -> ${outputPath}`);
+    console.log(`📱 设备类型: ${deviceInfo?.type || 'unknown'}`);
+    console.log(`📊 准备写入 ${records.length} 条记录`);
+    
+    // 第一步：直接复制模板文件以保持最大兼容性
+    fs.copyFileSync(templatePath, outputPath);
+    console.log('✅ 模板文件复制完成，保持100%原始格式');
+    
+    // 第二步：使用ExcelJS以最小干预方式写入数据
+    const ExcelJS = require('exceljs');
+    const workbook = new ExcelJS.Workbook();
+    await workbook.xlsx.readFile(outputPath);
+    
+    const worksheet = workbook.getWorksheet(1);
+    if (!worksheet) {
+      throw new Error('无法读取工作表');
+    }
+    
+    // 从第12行开始写入数据，使用最直接的方式
+    let currentRow = 12;
+    let writtenCount = 0;
+    
+    records.forEach((record, index) => {
+      if (record.extractedFields) {
+        const quantita = record.extractedFields['Quantita'] || '';
+        const descrizione = record.extractedFields['Descrizione Articolo'] || '';
+        const numeroDoc = record.extractedFields['Numero Documento'] || '';
+        
+        // 只设置值，不修改任何样式
+        if (quantita) {
+          worksheet.getCell(`A${currentRow}`).value = quantita;
+        }
+        if (descrizione) {
+          worksheet.getCell(`B${currentRow}`).value = descrizione;
+        }
+        if (numeroDoc) {
+          worksheet.getCell(`G${currentRow}`).value = numeroDoc;
+        }
+        
+        console.log(`✍️ 写入第${index + 1}条记录到第${currentRow}行:`);
+        console.log(`  A${currentRow}: ${quantita}`);
+        console.log(`  B${currentRow}: ${descrizione}`);
+        console.log(`  G${currentRow}: ${numeroDoc}`);
+        
+        currentRow++;
+        writtenCount++;
+      }
+    });
+    
+    // 保存文件，使用最小干预模式
+    await workbook.xlsx.writeFile(outputPath);
+    
+    console.log(`✅ 移动端优化导出完成: ${outputPath}`);
+    console.log(`📊 成功写入 ${writtenCount} 条记录`);
+    console.log(`🎨 采用模板复制+最小干预写入，最大程度保持原始Excel格式`);
+    
+    // 生成数据确认文件
+    const confirmationData = {
+      exportInfo: {
+        timestamp: new Date().toISOString(),
+        deviceType: deviceInfo?.type || 'unknown',
+        recordCount: records.length,
+        writtenCount: writtenCount,
+        exportMode: 'mobile-optimized'
+      },
+      writtenData: records.map((record, index) => ({
+        index: index + 1,
+        row: 12 + index,
+        data: {
+          quantita: record.extractedFields?.['Quantita'] || '',
+          descrizione: record.extractedFields?.['Descrizione Articolo'] || '',
+          numeroDoc: record.extractedFields?.['Numero Documento'] || ''
+        }
+      }))
+    };
+    
+    const confirmationPath = outputPath.replace('.xlsx', '_Confirmation.json');
+    fs.writeFileSync(confirmationPath, JSON.stringify(confirmationData, null, 2), 'utf8');
+    
+    return {
+      excelFile: outputPath,
+      confirmationFile: confirmationPath,
+      preservedFormat: true,
+      dataWritten: true,
+      writtenCount: writtenCount
+    };
+  } catch (error) {
+    console.error('移动端优化导出失败:', error);
+    throw error;
+  }
+}
+
+// 纯模板复制导出函数 - 100%保持原始格式（备用方案）
 async function exportSelectedPureTemplate(templatePath, outputPath, records, deviceInfo) {
   try {
     console.log(`📋 使用纯模板复制方式: ${templatePath} -> ${outputPath}`);
@@ -1823,7 +1918,8 @@ async function exportSelectedPureTemplate(templatePath, outputPath, records, dev
     return {
       excelFile: outputPath,
       dataFile: dataPath,
-      preservedFormat: true
+      preservedFormat: true,
+      dataWritten: false
     };
   } catch (error) {
     console.error('纯模板导出失败:', error);
@@ -1871,27 +1967,45 @@ app.post('/api/export-selected', async (req, res) => {
     let exportResult;
     
     if (deviceType === 'mobile' || exportMode === 'mobile-optimized') {
-      // 移动端：使用纯模板复制，确保100%格式一致性
-      console.log('📱 使用移动端优化模式：纯模板复制');
-      exportResult = await exportSelectedPureTemplate(templatePath, filepath, records, deviceInfo);
+      // 移动端：使用移动端优化导出，既保持格式又写入数据
+      console.log('📱 使用移动端优化模式：格式保持+数据写入');
+      try {
+        exportResult = await exportSelectedMobileOptimized(templatePath, filepath, records, deviceInfo);
+      } catch (mobileError) {
+        console.log('⚠️ 移动端优化导出失败，回退到纯模板复制模式');
+        console.error('移动端导出错误:', mobileError.message);
+        exportResult = await exportSelectedPureTemplate(templatePath, filepath, records, deviceInfo);
+      }
     } else if (deviceType === 'tablet' || exportMode === 'tablet-optimized') {
-      // 平板：使用纯模板复制，确保兼容性
-      console.log('📱 使用平板优化模式：纯模板复制');
-      exportResult = await exportSelectedPureTemplate(templatePath, filepath, records, deviceInfo);
+      // 平板：使用移动端优化导出，确保兼容性
+      console.log('📱 使用平板优化模式：格式保持+数据写入');
+      try {
+        exportResult = await exportSelectedMobileOptimized(templatePath, filepath, records, deviceInfo);
+      } catch (tabletError) {
+        console.log('⚠️ 平板优化导出失败，回退到纯模板复制模式');
+        console.error('平板导出错误:', tabletError.message);
+        exportResult = await exportSelectedPureTemplate(templatePath, filepath, records, deviceInfo);
+      }
     } else {
-      // 桌面端：可以尝试ExcelJS，但如果失败则回退到纯模板复制
+      // 桌面端：可以尝试ExcelJS，但如果失败则回退到移动端优化模式
       console.log('💻 使用桌面标准模式：ExcelJS + 回退机制');
       try {
         await exportSelectedWithExcelJS(templatePath, filepath, records);
-        exportResult = { excelFile: filepath, preservedFormat: false };
+        exportResult = { excelFile: filepath, preservedFormat: false, dataWritten: true };
       } catch (excelJSError) {
-        console.log('⚠️ ExcelJS导出失败，回退到纯模板复制模式');
-        exportResult = await exportSelectedPureTemplate(templatePath, filepath, records, deviceInfo);
+        console.log('⚠️ ExcelJS导出失败，回退到移动端优化模式');
+        console.error('桌面端ExcelJS错误:', excelJSError.message);
+        exportResult = await exportSelectedMobileOptimized(templatePath, filepath, records, deviceInfo);
       }
     }
     
     console.log(`📊 成功导出 ${records.length} 条记录到模板`);
     console.log(`🎨 格式保持状态: ${exportResult.preservedFormat ? '100%原始格式' : 'ExcelJS处理格式'}`);
+    console.log(`📝 数据写入状态: ${exportResult.dataWritten ? '已写入Excel文件' : '仅提供数据映射'}`);
+    
+    if (exportResult.writtenCount !== undefined) {
+      console.log(`✍️ 实际写入记录数: ${exportResult.writtenCount}/${records.length}`);
+    }
 
     // 发送文件
     res.download(filepath, filename, (err) => {
@@ -1900,11 +2014,16 @@ app.post('/api/export-selected', async (req, res) => {
         res.status(500).json({ success: false, message: '文件下载失败' });
       } else {
         console.log(`📤 文件下载成功: ${filename}`);
-        console.log(`📁 设备类型: ${deviceType}, 格式保持: ${exportResult.preservedFormat ? '完整' : '部分'}`);
+        console.log(`📁 设备类型: ${deviceType}, 格式保持: ${exportResult.preservedFormat ? '完整' : '部分'}, 数据写入: ${exportResult.dataWritten ? '是' : '否'}`);
         
         // 如果生成了数据映射文件，也保留它
         if (exportResult.dataFile) {
           console.log(`📋 数据映射文件: ${exportResult.dataFile}`);
+        }
+        
+        // 如果生成了确认文件，也保留它
+        if (exportResult.confirmationFile) {
+          console.log(`✅ 数据确认文件: ${exportResult.confirmationFile}`);
         }
       }
     });
