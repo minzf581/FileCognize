@@ -647,8 +647,11 @@
                 
                 <!-- 批量操作按钮 -->
                 <div class="batch-actions">
-                    <button id="exportSelectedBtn" class="btn btn-primary" onclick="exportSelected()" disabled>
-                        <i class="fas fa-download"></i> 导出选中记录
+                    <button id="exportSelectedPdfBtn" class="btn btn-primary" onclick="exportSelectedPDF()" disabled>
+                        <i class="fas fa-file-pdf"></i> 导出PDF (推荐)
+                    </button>
+                    <button id="exportSelectedBtn" class="btn btn-outline-primary" onclick="exportSelected()" disabled>
+                        <i class="fas fa-download"></i> 导出Excel
                     </button>
                     <button id="printSelectedBtn" class="btn btn-secondary" onclick="printSelected()" disabled>
                         <i class="fas fa-print"></i> 打印选中记录
@@ -974,7 +977,8 @@
             
             // 更新批量操作按钮状态
             const hasSelection = count > 0;
-            document.getElementById('exportSelectedBtn').disabled = !hasSelection;
+            document.getElementById('exportSelectedPdfBtn').disabled = !hasSelection; // PDF导出按钮（主要）
+            document.getElementById('exportSelectedBtn').disabled = !hasSelection;    // Excel导出按钮（备选）
             document.getElementById('printSelectedBtn').disabled = !hasSelection;
             document.getElementById('deleteSelectedBtn').disabled = !hasSelection;
         }
@@ -1059,13 +1063,18 @@
                     document.body.removeChild(a);
                     window.URL.revokeObjectURL(url);
                     
-                    let successMessage = `成功导出 ${selectedIds.length} 条记录！`;
+                    let successMessage = `✅ 成功导出 ${selectedIds.length} 条记录为Excel格式！`;
                     if (device.isMobile) {
-                        successMessage += ' (移动端完全格式保持版本)';
+                        successMessage += ' (移动端优化版本)';
                     } else if (device.isTablet) {
-                        successMessage += ' (平板完全格式保持版本)';
+                        successMessage += ' (平板优化版本)';
                     }
                     showMessage(successMessage, 'success');
+                    
+                    // 为用户提供Excel格式说明
+                    setTimeout(() => {
+                        showMessage('📊 Excel格式优势：可编辑数据，支持公式计算和进一步处理', 'info');
+                    }, 2000);
                     
                     // 为移动端用户提供额外说明
                     if (device.isMobile || device.isTablet) {
@@ -1087,6 +1096,82 @@
             } catch (error) {
                 console.error('导出失败:', error);
                 showMessage(`导出失败: ${error.message}`, 'danger');
+            }
+        }
+
+        // 导出选中记录为PDF - 避免跨平台差异
+        async function exportSelectedPDF() {
+            const selectedIds = getSelectedRecordIds();
+            if (selectedIds.length === 0) {
+                showMessage('请选择要导出的记录！', 'warning');
+                return;
+            }
+
+            try {
+                const selectedRecords = historyData.filter(item => selectedIds.includes(item.id));
+                const device = detectDevice();
+                
+                console.log('📄 PDF导出设备信息:', device);
+                
+                // 创建临时会话ID
+                const tempSessionId = generateSessionId();
+                
+                showMessage('正在生成PDF文件，请稍候...', 'info');
+                
+                // 发送选中的记录到后端生成PDF
+                const response = await fetch('/api/export-selected-pdf', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        sessionId: tempSessionId,
+                        records: selectedRecords,
+                        deviceInfo: {
+                            type: device.isMobile ? 'mobile' : device.isTablet ? 'tablet' : 'desktop',
+                            userAgent: device.userAgent,
+                            exportMode: 'pdf-export'
+                        }
+                    })
+                });
+
+                if (response.ok) {
+                    const blob = await response.blob();
+                    const url = window.URL.createObjectURL(blob);
+                    const a = document.createElement('a');
+                    a.href = url;
+                    
+                    // 根据设备类型调整文件名
+                    const timestamp = formatDateTime(new Date().toISOString()).replace(/[:\s]/g, '-');
+                    const deviceSuffix = device.isMobile ? '_Mobile' : device.isTablet ? '_Tablet' : '';
+                    a.download = `FileCognize_Selected${deviceSuffix}_${timestamp}.pdf`;
+                    
+                    document.body.appendChild(a);
+                    a.click();
+                    document.body.removeChild(a);
+                    window.URL.revokeObjectURL(url);
+                    
+                    let successMessage = `✅ 成功导出 ${selectedIds.length} 条记录为PDF！`;
+                    showMessage(successMessage, 'success');
+                    
+                    // 为用户提供PDF优势说明
+                    setTimeout(() => {
+                        showMessage('📄 PDF格式优势：跨平台完全一致，无论在Windows、Mac还是手机上都显示相同', 'info');
+                    }, 2000);
+                    
+                    setTimeout(() => {
+                        showMessage('🖨️ PDF文件可直接打印或分享，格式永不变形，适合正式文档存档', 'success');
+                    }, 4000);
+                    
+                    setTimeout(() => {
+                        showMessage('💡 提示：如需编辑数据，可使用"导出Excel"按钮获取可编辑版本', 'info');
+                    }, 6000);
+                } else {
+                    throw new Error('PDF导出失败');
+                }
+            } catch (error) {
+                console.error('PDF导出失败:', error);
+                showMessage(`PDF导出失败: ${error.message}`, 'danger');
             }
         }
 

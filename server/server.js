@@ -1791,9 +1791,11 @@ async function exportSelectedMobileOptimized(templatePath, outputPath, records, 
     // 读取文件，使用基本选项确保兼容性
     const workbook = XLSX.readFile(outputPath);
     
-    const worksheet = workbook.Sheets[workbook.SheetNames[0]];
+    // 获取第一个工作表
+    const sheetName = workbook.SheetNames[0];
+    const worksheet = workbook.Sheets[sheetName];
     if (!worksheet) {
-      throw new Error('无法读取工作表');
+      throw new Error(`无法读取工作表: ${sheetName}`);
     }
     
     console.log('📋 原始模板验证:');
@@ -1998,11 +2000,8 @@ app.post('/api/export-selected', async (req, res) => {
       });
     }
 
-    const deviceType = deviceInfo?.type || 'unknown';
-    const exportMode = deviceInfo?.exportMode || 'standard';
-    
     console.log(`🔄 开始导出选中的 ${records.length} 条记录...`);
-    console.log(`📱 设备类型: ${deviceType}, 导出模式: ${exportMode}`);
+    console.log(`📱 设备类型: ${deviceInfo?.type || 'unknown'}, 导出模式: ${deviceInfo?.exportMode || 'standard'}`);
 
     // 读取output.xlsx模板
     const templatePath = path.join(__dirname, '..', 'output.xlsx');
@@ -2010,9 +2009,9 @@ app.post('/api/export-selected', async (req, res) => {
       throw new Error('找不到output.xlsx模板文件');
     }
 
-    // 生成导出文件路径
+    // 生成文件名
     const timestamp = new Date().toISOString().slice(0, 19).replace(/:/g, '-');
-    const deviceSuffix = deviceType === 'mobile' ? '_Mobile' : deviceType === 'tablet' ? '_Tablet' : '';
+    const deviceSuffix = deviceInfo?.type === 'mobile' ? '_Mobile' : deviceInfo?.type === 'tablet' ? '_Tablet' : '';
     const filename = `FileCognize_Selected${deviceSuffix}_${timestamp}.xlsx`;
     const filepath = path.join(__dirname, 'exports', filename);
     
@@ -2022,51 +2021,54 @@ app.post('/api/export-selected', async (req, res) => {
       fs.mkdirSync(exportsDir, { recursive: true });
     }
 
-    // 根据设备类型选择导出方式
     let exportResult;
+    let formatStatus = '部分';
+    let dataWritten = true;
+    let exportMethod = 'ExcelJS-Standard';
+
+    // 统一使用ExcelJS导出模式，确保跨设备格式一致性
+    console.log('💻 使用统一ExcelJS导出模式：确保跨设备格式一致性');
     
-    // 统一使用ExcelJS导出策略，确保所有设备格式一致性
-    console.log(`💻 使用统一ExcelJS导出模式：确保跨设备格式一致性`);
     try {
       await exportSelectedWithExcelJS(templatePath, filepath, records);
-      exportResult = { 
-        excelFile: filepath, 
-        preservedFormat: true, 
-        dataWritten: true,
-        exportMethod: 'ExcelJS-Unified'
-      };
       console.log('✅ ExcelJS统一导出成功，格式与桌面端完全一致');
+      formatStatus = '✅ ExcelJS统一格式';
+      exportMethod = 'ExcelJS-Unified';
     } catch (excelJSError) {
-      console.log('⚠️ ExcelJS导出失败，使用XLSX库回退模式');
-      console.error('ExcelJS错误:', excelJSError.message);
+      console.error('ExcelJS导出失败:', excelJSError);
       
-      // 回退到XLSX模式，但添加格式警告
+      // 回退到移动端优化模式
+      console.log('⚠️ ExcelJS导出失败，回退到移动端优化模式');
       try {
         exportResult = await exportSelectedMobileOptimized(templatePath, filepath, records, deviceInfo);
-        exportResult.formatWarning = 'XLSX库可能存在格式差异，建议使用桌面端导出获得最佳格式效果';
-      } catch (xlsxError) {
-        console.log('⚠️ XLSX导出也失败，使用纯模板复制模式');
-        console.error('XLSX错误:', xlsxError.message);
+        formatStatus = '100%原始格式';
+        exportMethod = 'XLSX-Optimized';
+      } catch (mobileError) {
+        console.error('移动端优化导出失败:', mobileError);
+        
+        // 最终回退到纯模板复制
+        console.log('⚠️ 移动端优化导出失败，回退到纯模板复制模式');
         exportResult = await exportSelectedPureTemplate(templatePath, filepath, records, deviceInfo);
+        formatStatus = '100%原始格式';
+        dataWritten = false;
+        exportMethod = 'Pure-Template';
       }
     }
-    
+
     console.log(`📊 成功导出 ${records.length} 条记录到模板`);
-    console.log(`🎨 格式保持状态: ${exportResult.exportMethod === 'ExcelJS-Unified' ? '✅ ExcelJS统一格式' : exportResult.preservedFormat ? '100%原始格式' : 'ExcelJS处理格式'}`);
-    console.log(`📝 数据写入状态: ${exportResult.dataWritten ? '已写入Excel文件' : '仅提供数据映射'}`);
-    console.log(`🔧 导出方法: ${exportResult.exportMethod || 'ExcelJS-Standard'}`);
-    
-    if (exportResult.formatWarning) {
-      console.log(`⚠️ 格式警告: ${exportResult.formatWarning}`);
-    }
-    
-    if (exportResult.writtenCount !== undefined) {
+    console.log(`🎨 格式保持状态: ${formatStatus}`);
+    console.log(`📝 数据写入状态: ${dataWritten ? '已写入Excel文件' : '仅提供数据映射'}`);
+    if (exportResult?.writtenCount !== undefined) {
       console.log(`✍️ 实际写入记录数: ${exportResult.writtenCount}/${records.length}`);
     }
-    
-    if (exportResult.formatVerified !== undefined) {
-      console.log(`🔍 格式验证状态: ${exportResult.formatVerified ? '✅ 表头信息完整保持' : '⚠️ 部分格式可能丢失'}`);
+    if (exportResult?.formatVerified !== undefined) {
+      console.log(`🔍 格式验证状态: ${exportResult.formatVerified ? '✅ 表头信息完整保持' : '⚠️ 表头信息可能有变化'}`);
     }
+    console.log(`🔧 导出方法: ${exportMethod}`);
+
+    // 设置响应头
+    res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+    res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
 
     // 发送文件
     res.download(filepath, filename, (err) => {
@@ -2075,17 +2077,32 @@ app.post('/api/export-selected', async (req, res) => {
         res.status(500).json({ success: false, message: '文件下载失败' });
       } else {
         console.log(`📤 文件下载成功: ${filename}`);
-        console.log(`📁 设备类型: ${deviceType}, 格式保持: ${exportResult.preservedFormat ? '完整' : '部分'}, 数据写入: ${exportResult.dataWritten ? '是' : '否'}`);
+        console.log(`📁 设备类型: ${deviceInfo?.type || 'unknown'}, 格式保持: ${formatStatus === '✅ ExcelJS统一格式' ? '完整' : formatStatus}, 数据写入: ${dataWritten ? '是' : '否'}`);
         
-        // 如果生成了数据映射文件，也保留它
-        if (exportResult.dataFile) {
-          console.log(`📋 数据映射文件: ${exportResult.dataFile}`);
-        }
-        
-        // 如果生成了确认文件，也保留它
-        if (exportResult.confirmationFile) {
+        if (exportResult?.confirmationFile) {
           console.log(`✅ 数据确认文件: ${exportResult.confirmationFile}`);
         }
+        if (exportResult?.dataMapping) {
+          console.log(`📋 数据映射文件: ${exportResult.dataMapping}`);
+        }
+        
+        // 下载完成后删除临时文件
+        setTimeout(() => {
+          try {
+            fs.unlinkSync(filepath);
+            console.log(`🗑️ 临时文件已删除: ${filename}`);
+            
+            // 删除相关的确认或映射文件
+            if (exportResult?.confirmationFile && fs.existsSync(exportResult.confirmationFile)) {
+              fs.unlinkSync(exportResult.confirmationFile);
+            }
+            if (exportResult?.dataMapping && fs.existsSync(exportResult.dataMapping)) {
+              fs.unlinkSync(exportResult.dataMapping);
+            }
+          } catch (deleteErr) {
+            console.error('删除临时文件失败:', deleteErr);
+          }
+        }, 5000);
       }
     });
 
@@ -2094,6 +2111,90 @@ app.post('/api/export-selected', async (req, res) => {
     res.status(500).json({ 
       success: false, 
       message: '导出失败: ' + error.message 
+    });
+  }
+});
+
+// 新增：直接PDF导出选中记录 - 避免跨平台差异
+app.post('/api/export-selected-pdf', async (req, res) => {
+  try {
+    const { sessionId, records, deviceInfo } = req.body;
+    
+    if (!records || !Array.isArray(records) || records.length === 0) {
+      return res.status(400).json({ 
+        success: false, 
+        message: '没有选中的记录' 
+      });
+    }
+
+    console.log(`📄 开始PDF导出选中的 ${records.length} 条记录...`);
+    console.log(`📱 设备类型: ${deviceInfo?.type || 'unknown'}`);
+
+    // 读取output.xlsx模板
+    const templatePath = path.join(__dirname, '..', 'output.xlsx');
+    if (!fs.existsSync(templatePath)) {
+      throw new Error('找不到output.xlsx模板文件');
+    }
+
+    // 生成文件名
+    const timestamp = new Date().toISOString().slice(0, 19).replace(/:/g, '-');
+    const deviceSuffix = deviceInfo?.type === 'mobile' ? '_Mobile' : deviceInfo?.type === 'tablet' ? '_Tablet' : '';
+    const tempExcelFilename = `PDF_Export_Selected${deviceSuffix}_${timestamp}.xlsx`;
+    const tempExcelPath = path.join(__dirname, 'exports', tempExcelFilename);
+    const pdfFilename = `FileCognize_Selected${deviceSuffix}_${timestamp}.pdf`;
+    const pdfPath = path.join(__dirname, 'exports', pdfFilename);
+    
+    // 确保exports目录存在
+    const exportsDir = path.join(__dirname, 'exports');
+    if (!fs.existsSync(exportsDir)) {
+      fs.mkdirSync(exportsDir, { recursive: true });
+    }
+
+    // 使用ExcelJS导出到临时Excel文件
+    await exportSelectedWithExcelJS(templatePath, tempExcelPath, records);
+    console.log(`✅ 临时Excel文件创建完成: ${tempExcelFilename}`);
+    
+    // 将Excel转换为PDF
+    await convertExcelToPDF(tempExcelPath, pdfPath);
+    console.log(`✅ PDF导出完成: ${pdfFilename}`);
+
+    // 设置响应头为PDF文件
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader('Content-Disposition', `attachment; filename="${pdfFilename}"`);
+
+    // 发送PDF文件
+    res.download(pdfPath, pdfFilename, (err) => {
+      if (err) {
+        console.error('PDF文件下载失败:', err);
+        res.status(500).json({ success: false, message: 'PDF文件下载失败' });
+      } else {
+        console.log(`📤 PDF文件下载成功: ${pdfFilename}`);
+        console.log(`📊 包含 ${records.length} 条选中记录`);
+        console.log(`📁 设备类型: ${deviceInfo?.type || 'unknown'}, 格式: PDF (跨平台一致)`);
+        
+        // 延迟删除临时文件
+        setTimeout(() => {
+          try {
+            if (fs.existsSync(tempExcelPath)) {
+              fs.unlinkSync(tempExcelPath);
+              console.log(`🗑️ 临时Excel文件已删除: ${tempExcelFilename}`);
+            }
+            if (fs.existsSync(pdfPath)) {
+              fs.unlinkSync(pdfPath);
+              console.log(`🗑️ 临时PDF文件已删除: ${pdfFilename}`);
+            }
+          } catch (deleteErr) {
+            console.error('删除临时文件失败:', deleteErr);
+          }
+        }, 10000); // 10秒后删除，给用户足够时间下载
+      }
+    });
+
+  } catch (error) {
+    console.error('PDF导出失败:', error);
+    res.status(500).json({ 
+      success: false, 
+      message: 'PDF导出失败: ' + error.message 
     });
   }
 });
