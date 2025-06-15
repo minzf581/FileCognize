@@ -1788,18 +1788,8 @@ async function exportSelectedMobileOptimized(templatePath, outputPath, records, 
     // 第二步：使用XLSX库进行最小干预的数据写入（避免ExcelJS的格式问题）
     const XLSX = require('xlsx');
     
-    // 读取文件，保持所有原始格式
-    const workbook = XLSX.readFile(outputPath, { 
-      cellStyles: true,
-      cellHTML: false,
-      cellFormula: true,
-      cellDates: true,
-      sheetStubs: true,
-      bookDeps: true,
-      bookSheets: true,
-      bookProps: true,
-      bookVBA: true
-    });
+    // 读取文件，使用基本选项确保兼容性
+    const workbook = XLSX.readFile(outputPath);
     
     const worksheet = workbook.Sheets[workbook.SheetNames[0]];
     if (!worksheet) {
@@ -1875,7 +1865,7 @@ async function exportSelectedMobileOptimized(templatePath, outputPath, records, 
     console.log(`🎨 采用XLSX库最小干预写入，完全保持原始Excel格式`);
     
     // 验证导出后的格式保持情况
-    const verifyWorkbook = XLSX.readFile(outputPath, { cellStyles: true });
+    const verifyWorkbook = XLSX.readFile(outputPath);
     const verifyWorksheet = verifyWorkbook.Sheets[verifyWorkbook.SheetNames[0]];
     
     console.log('🔍 导出后格式验证:');
