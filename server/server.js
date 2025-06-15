@@ -1284,7 +1284,7 @@ app.post('/api/pdf-ocr-and-process', upload.single('file'), async (req, res) => 
           }
           
           // 使用新的固定区域OCR识别图片
-          const extractedData = await ocrService.recognizeDocument(tempImagePath);
+          let extractedData = await ocrService.recognizeDocument(tempImagePath);
           
           if (Object.keys(extractedData).length > 0) {
             console.log('OCR识别成功，提取到字段:', Object.keys(extractedData));
@@ -1373,10 +1373,12 @@ app.post('/api/pdf-ocr-and-process', upload.single('file'), async (req, res) => 
       
       try {
         // 直接使用OCR识别图片
-        const extractedData = await ocrService.recognizeDocument(req.file.path);
+        let extractedData = await ocrService.recognizeDocument(req.file.path);
         
+        // 应用数据格式化规则
         if (Object.keys(extractedData).length > 0) {
           console.log('图片OCR识别成功，提取到字段:', Object.keys(extractedData));
+          extractedData = formatRecognizedData(extractedData);
           
           // 如果提供了sessionId，直接添加到会话中
           if (sessionId) {
