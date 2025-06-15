@@ -262,8 +262,7 @@ class OCRService {
     }
 
     // 安全的OCR识别方法，带有多重错误保护
-    async safeRecognize(imagePath, retryCount = 0) {
-        const maxRetries = 2;
+    async safeRecognize(imagePath, retryCount = 0, maxRetries = 2) {
         
         try {
             console.log(`🔍 执行OCR识别 (尝试 ${retryCount + 1}/${maxRetries + 1}): ${path.basename(imagePath)}`);
@@ -340,7 +339,7 @@ class OCRService {
                     }
                     
                     // 递归重试
-                    return await this.safeRecognize(imagePath, retryCount + 1);
+                    return await this.safeRecognize(imagePath, retryCount + 1, maxRetries);
                     
                 } catch (retryError) {
                     console.error(`❌ 重试初始化失败:`, retryError.message);
@@ -354,12 +353,23 @@ class OCRService {
     }
 
     // 完整的文档识别流程
-    async recognizeDocument(imagePath) {
+    async recognizeDocument(imagePath, options = {}) {
         try {
             console.log(`🔍 开始识别文档: ${path.basename(imagePath)}`);
             
-            // 使用安全的OCR识别方法
-            const { text, confidence } = await this.safeRecognize(imagePath);
+            const { source = 'upload', enhanced = false, retries = 2 } = options;
+            
+            if (source === 'camera') {
+                console.log('📱 拍照模式: 使用优化识别策略');
+                if (enhanced) {
+                    console.log('✨ 图像已预处理: 跳过部分增强步骤');
+                }
+            }
+            
+            // 使用安全的OCR识别方法，拍照文件允许更多重试
+            const { text, confidence } = await this.safeRecognize(imagePath, 0, retries);
+            
+            console.log(`📄 OCR置信度: ${confidence.toFixed(1)}%`);
             
             const results = {};
 
@@ -379,12 +389,32 @@ class OCRService {
                 results['Descrizione Articolo'] = descrizione;
             }
 
+            // 为拍照文件提供额外的识别质量评估
+            if (source === 'camera') {
+                const fieldCount = Object.keys(results).length;
+                console.log(`📱 拍照识别质量评估: ${fieldCount}/3 字段识别成功`);
+                
+                if (fieldCount === 0) {
+                    console.log('⚠️ 拍照识别结果为空，可能需要重新拍照');
+                } else if (fieldCount < 2) {
+                    console.log('⚠️ 拍照识别结果不完整，建议重新拍照以获得更好效果');
+                } else {
+                    console.log('✅ 拍照识别结果良好');
+                }
+            }
+
             console.log('📊 最终识别结果:', results);
             return results;
 
         } catch (error) {
             console.error('❌ 文档识别完全失败:', error.message);
             console.error('错误堆栈:', error.stack);
+            
+            // 为拍照文件提供更具体的错误信息
+            if (options.source === 'camera') {
+                console.log('❌ 拍照识别失败，建议用户重新拍照');
+                throw new Error('拍照识别失败，请确保文档清晰可见');
+            }
             
             // 返回空结果而不是抛出错误，避免系统崩溃
             console.log('⚠️ 返回空结果以避免系统崩溃');

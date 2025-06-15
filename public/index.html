@@ -540,23 +540,23 @@
                         <video id="cameraVideo" autoplay playsinline muted></video>
                         <img id="capturedImage" style="display: none;" />
                         <div class="camera-controls">
-                            <button class="btn btn-success" id="captureBtn" onclick="capturePhoto()">
-                                <i class="fas fa-camera"></i> 拍照
-                            </button>
                             <button class="btn btn-danger" onclick="closeCamera()">
                                 <i class="fas fa-times"></i> 关闭相机
+                            </button>
+                            <button class="btn btn-success" id="captureBtn" onclick="capturePhoto()">
+                                <i class="fas fa-camera"></i> 拍照
                             </button>
                         </div>
                         <!-- 拍照后的确认界面 -->
                         <div class="photo-confirm-controls" id="photoConfirmControls" style="display: none;">
-                            <button class="btn btn-primary" onclick="confirmPhoto()">
-                                <i class="fas fa-check"></i> 确认识别
+                            <button class="btn btn-danger" onclick="closeCamera()">
+                                <i class="fas fa-times"></i> 取消
                             </button>
                             <button class="btn btn-secondary" onclick="retakePhoto()">
                                 <i class="fas fa-redo"></i> 重新拍照
                             </button>
-                            <button class="btn btn-danger" onclick="closeCamera()">
-                                <i class="fas fa-times"></i> 取消
+                            <button class="btn btn-primary" onclick="confirmPhoto()">
+                                <i class="fas fa-check"></i> 确认识别
                             </button>
                         </div>
                         <canvas id="captureCanvas" style="display: none;"></canvas>
@@ -1186,7 +1186,22 @@
                 // 切换到预览模式
                 document.getElementById('cameraVideo').style.display = 'none';
                 document.getElementById('capturedImage').style.display = 'block';
-                document.getElementById('cameraStatus').textContent = '请确认照片质量，文字是否清晰可见';
+                
+                // 评估图像质量并提供建议
+                evaluatePhotoQuality(blob).then(quality => {
+                    if (quality.score >= 80) {
+                        document.getElementById('cameraStatus').textContent = '✅ 照片质量良好，文字清晰可见';
+                        document.getElementById('cameraStatus').style.color = '#28a745';
+                    } else if (quality.score >= 60) {
+                        document.getElementById('cameraStatus').textContent = '⚠️ 照片质量一般，建议重新拍照';
+                        document.getElementById('cameraStatus').style.color = '#ffc107';
+                    } else {
+                        document.getElementById('cameraStatus').textContent = '❌ 照片质量较差，建议重新拍照';
+                        document.getElementById('cameraStatus').style.color = '#dc3545';
+                    }
+                }).catch(() => {
+                    document.getElementById('cameraStatus').textContent = '请确认照片质量，文字是否清晰可见';
+                });
                 
                 // 切换控制按钮
                 document.querySelector('.camera-controls').style.display = 'none';
@@ -1195,24 +1210,113 @@
             }, 'image/jpeg', 0.95); // 使用95%质量而不是80%
         }
 
-        function confirmPhoto() {
+        async function confirmPhoto() {
             if (!capturedPhotoBlob) {
                 showMessage('未找到拍照数据，请重新拍照', 'danger');
                 return;
             }
             
+            // 创建高质量的文件对象
             const file = new File([capturedPhotoBlob], 'camera-capture.jpg', { 
                 type: 'image/jpeg',
                 lastModified: Date.now()
             });
             
+            console.log('📸 拍照文件信息:', {
+                name: file.name,
+                size: (file.size / 1024 / 1024).toFixed(2) + ' MB',
+                type: file.type
+            });
+            
             closeCamera();
             
-            // 显示拍照成功提示
-            showMessage('拍照成功，正在识别文档...', 'success');
-            
-            // 处理文件
-            handleFile(file);
+            // 使用增强的文件处理流程
+            await handleCameraFile(file);
+        }
+
+        // 专门为拍照文件优化的处理函数
+        async function handleCameraFile(file) {
+            if (!file.type.startsWith('image/')) {
+                showMessage('拍照文件类型错误，请重新拍照', 'danger');
+                return;
+            }
+
+            const sessionId = generateSessionId();
+            currentSessionId = sessionId;
+
+            showProgress(true);
+            updateProgress(5, '正在准备拍照文件...');
+
+            try {
+                const formData = new FormData();
+                formData.append('file', file);
+                
+                // 添加额外的拍照标识，帮助后端优化处理
+                formData.append('source', 'camera');
+                formData.append('enhanced', 'true'); // 标识已经过前端图像增强
+                
+                updateProgress(15, '正在上传拍照文件...');
+
+                const response = await fetch(`/api/ocr-and-process?sessionId=${sessionId}`, {
+                    method: 'POST',
+                    body: formData
+                });
+
+                updateProgress(40, '正在进行OCR识别...');
+
+                if (!response.ok) {
+                    const errorText = await response.text();
+                    throw new Error(`服务器错误: ${response.status} - ${errorText}`);
+                }
+
+                const data = await response.json();
+
+                updateProgress(85, '正在处理识别结果...');
+
+                // 添加延迟以显示进度
+                await new Promise(resolve => setTimeout(resolve, 500));
+
+                updateProgress(100, '识别完成！');
+
+                setTimeout(() => {
+                    showProgress(false);
+                    if (data.success) {
+                        console.log('📊 拍照识别成功:', data);
+                        showMessage('拍照识别成功！', 'success');
+                        displayResult(data);
+                    } else {
+                        console.error('❌ 拍照识别失败:', data);
+                        showMessage(`拍照识别失败: ${data.error || data.message || '未知错误'}`, 'danger');
+                        
+                        // 提供重新拍照的建议
+                        setTimeout(() => {
+                            showMessage('建议重新拍照，确保文档清晰且光线充足', 'warning');
+                        }, 3000);
+                    }
+                }, 1000);
+
+            } catch (error) {
+                console.error('❌ 拍照处理失败:', error);
+                showProgress(false);
+                
+                let errorMessage = '拍照识别失败';
+                if (error.message.includes('timeout')) {
+                    errorMessage = '识别超时，请检查网络连接后重试';
+                } else if (error.message.includes('网络')) {
+                    errorMessage = '网络错误，请检查连接后重试';
+                } else if (error.message.includes('服务器')) {
+                    errorMessage = '服务器错误，请稍后重试';
+                } else {
+                    errorMessage = `处理失败: ${error.message}`;
+                }
+                
+                showMessage(errorMessage, 'danger');
+                
+                // 提供操作建议
+                setTimeout(() => {
+                    showMessage('请尝试重新拍照或使用文件上传功能', 'info');
+                }, 3000);
+            }
         }
 
         function retakePhoto() {
@@ -1233,6 +1337,88 @@
             
             // 清理数据
             capturedPhotoBlob = null;
+        }
+
+        // 图像质量评估函数
+        async function evaluatePhotoQuality(blob) {
+            return new Promise((resolve, reject) => {
+                try {
+                    const img = new Image();
+                    img.onload = function() {
+                        const canvas = document.createElement('canvas');
+                        const ctx = canvas.getContext('2d');
+                        
+                        canvas.width = img.width;
+                        canvas.height = img.height;
+                        ctx.drawImage(img, 0, 0);
+                        
+                        const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+                        const data = imageData.data;
+                        
+                        let totalVariance = 0;
+                        let brightPixels = 0;
+                        let darkPixels = 0;
+                        let totalBrightness = 0;
+                        
+                        // 计算图像清晰度和对比度
+                        for (let i = 0; i < data.length; i += 4) {
+                            const r = data[i];
+                            const g = data[i + 1];
+                            const b = data[i + 2];
+                            
+                            const gray = 0.299 * r + 0.587 * g + 0.114 * b;
+                            totalBrightness += gray;
+                            
+                            if (gray > 200) brightPixels++;
+                            if (gray < 50) darkPixels++;
+                            
+                            // 计算局部方差（清晰度指标）
+                            if (i > 0 && i < data.length - 4) {
+                                const prevGray = 0.299 * data[i-4] + 0.587 * data[i-3] + 0.114 * data[i-2];
+                                totalVariance += Math.abs(gray - prevGray);
+                            }
+                        }
+                        
+                        const pixelCount = data.length / 4;
+                        const avgBrightness = totalBrightness / pixelCount;
+                        const avgVariance = totalVariance / pixelCount;
+                        const contrastRatio = (brightPixels + darkPixels) / pixelCount;
+                        
+                        // 计算质量分数
+                        let score = 50; // 基础分数
+                        
+                        // 清晰度评分（0-30分）
+                        if (avgVariance > 15) score += 30;
+                        else if (avgVariance > 10) score += 20;
+                        else if (avgVariance > 5) score += 10;
+                        
+                        // 亮度评分（0-20分）
+                        if (avgBrightness >= 80 && avgBrightness <= 180) score += 20;
+                        else if (avgBrightness >= 60 && avgBrightness <= 200) score += 10;
+                        
+                        // 对比度评分（0-20分）
+                        if (contrastRatio >= 0.3 && contrastRatio <= 0.7) score += 20;
+                        else if (contrastRatio >= 0.2 && contrastRatio <= 0.8) score += 10;
+                        
+                        // 图像尺寸评分（0-10分）
+                        if (canvas.width >= 800 && canvas.height >= 600) score += 10;
+                        else if (canvas.width >= 640 && canvas.height >= 480) score += 5;
+                        
+                        resolve({
+                            score: Math.min(100, Math.max(0, score)),
+                            brightness: avgBrightness,
+                            sharpness: avgVariance,
+                            contrast: contrastRatio,
+                            dimensions: { width: canvas.width, height: canvas.height }
+                        });
+                    };
+                    
+                    img.onerror = () => reject(new Error('图像加载失败'));
+                    img.src = URL.createObjectURL(blob);
+                } catch (error) {
+                    reject(error);
+                }
+            });
         }
 
         // 图像增强函数，提升OCR识别率

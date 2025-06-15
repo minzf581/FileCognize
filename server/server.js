@@ -1085,9 +1085,50 @@ app.post('/api/ocr-and-process', upload.single('file'), async (req, res) => {
     }
 
     const sessionId = req.query.sessionId;
+    const source = req.body.source; // 文件来源：camera 或 upload
+    const enhanced = req.body.enhanced === 'true'; // 是否已经过前端增强
     
-    // 使用新的固定区域OCR识别
-    const extractedData = await ocrService.recognizeDocument(req.file.path);
+    console.log(`📱 文件来源: ${source || 'upload'}, 预处理状态: ${enhanced ? '已增强' : '原始'}`);
+    console.log(`📁 文件信息: ${req.file.originalname} (${(req.file.size / 1024).toFixed(2)} KB)`);
+    
+    // 使用新的固定区域OCR识别，为拍照文件提供特殊优化
+    let extractedData;
+    try {
+      if (source === 'camera') {
+        console.log('🔍 使用拍照优化模式进行OCR识别...');
+        extractedData = await ocrService.recognizeDocument(req.file.path, {
+          source: 'camera',
+          enhanced: enhanced,
+          retries: 3 // 拍照文件允许更多重试
+        });
+      } else {
+        console.log('🔍 使用标准模式进行OCR识别...');
+        extractedData = await ocrService.recognizeDocument(req.file.path);
+      }
+      
+      console.log(`📊 识别结果: 提取到 ${Object.keys(extractedData).length} 个字段`);
+      if (Object.keys(extractedData).length > 0) {
+        console.log('📄 提取的字段:', Object.keys(extractedData));
+      }
+    } catch (ocrError) {
+      console.error('❌ OCR识别失败:', ocrError.message);
+      
+      // 为拍照文件提供更友好的错误信息
+      if (source === 'camera') {
+        return res.status(500).json({
+          success: false,
+          error: '拍照识别失败，建议：1.确保文档清晰 2.光线充足 3.文字清楚可见',
+          suggestion: '请尝试重新拍照或调整拍摄角度',
+          extractedFields: {}
+        });
+      } else {
+        return res.status(500).json({
+          success: false,
+          error: 'OCR识别失败: ' + ocrError.message,
+          extractedFields: {}
+        });
+      }
+    }
     
     // 如果提供了sessionId，添加到会话中
     if (sessionId) {
