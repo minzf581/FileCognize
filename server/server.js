@@ -48,7 +48,9 @@ async function convertExcelToPDF(excelPath, pdfPath) {
       'SAL_USE_VCLPLUGIN': 'gen',
       'LIBREOFFICE_HEADLESS': 'true',
       'HOME': '/tmp', // 确保有写权限的home目录
-      'TMPDIR': '/tmp'
+      'TMPDIR': '/tmp',
+      'DISPLAY': ':99', // 虚拟显示器
+      'XAUTHORITY': '/tmp/.Xauth'
     };
     
     // 为Railway环境优化的LibreOffice命令参数
@@ -59,19 +61,59 @@ async function convertExcelToPDF(excelPath, pdfPath) {
     console.log(`📁 输出目录: ${outputDir}`);
     console.log(`📄 输入文件: ${excelPath}`);
     console.log(`🌐 云环境优化: ${process.env.RAILWAY_ENVIRONMENT ? 'Railway' : '本地'}`);
+    console.log(`🖥️ 显示器设置: ${env.DISPLAY}`);
     
-    // 执行转换命令，增加超时设置
-    const { stdout, stderr } = await execAsync(command, { 
-      env,
-      timeout: 30000 // 30秒超时
-    });
-    
-    if (stderr) {
-      console.log(`⚠️ LibreOffice警告: ${stderr}`);
+    // 在Railway环境中，先检查Xvfb是否运行
+    if (process.platform === 'linux') {
+      try {
+        await execAsync('pgrep Xvfb', { timeout: 5000 });
+        console.log('✅ Xvfb虚拟显示器正在运行');
+      } catch (xvfbError) {
+        console.log('⚠️ Xvfb可能未运行，尝试启动...');
+        try {
+          // 尝试启动Xvfb
+          execAsync('Xvfb :99 -screen 0 1024x768x24 -ac +extension GLX +render -noreset &', { timeout: 5000 });
+          await new Promise(resolve => setTimeout(resolve, 3000)); // 等待3秒
+          console.log('✅ Xvfb启动完成');
+        } catch (startError) {
+          console.log('⚠️ Xvfb启动失败，继续尝试LibreOffice转换');
+        }
+      }
     }
     
-    if (stdout) {
-      console.log(`📝 LibreOffice输出: ${stdout}`);
+    // 执行转换命令，增加超时设置和重试机制
+    let lastError;
+    for (let attempt = 1; attempt <= 3; attempt++) {
+      try {
+        console.log(`🔄 LibreOffice转换尝试 ${attempt}/3`);
+        const { stdout, stderr } = await execAsync(command, { 
+          env,
+          timeout: 45000 // 45秒超时
+        });
+        
+        // 如果成功，跳出重试循环
+        if (stderr) {
+          console.log(`⚠️ LibreOffice警告: ${stderr}`);
+        }
+        if (stdout) {
+          console.log(`📝 LibreOffice输出: ${stdout}`);
+        }
+        break; // 成功，退出重试循环
+        
+      } catch (error) {
+        lastError = error;
+        console.log(`❌ 第${attempt}次尝试失败: ${error.message}`);
+        
+        if (attempt < 3) {
+          console.log(`⏳ 等待${attempt * 2}秒后重试...`);
+          await new Promise(resolve => setTimeout(resolve, attempt * 2000));
+        }
+      }
+    }
+    
+    // 如果所有尝试都失败，抛出最后的错误
+    if (lastError) {
+      throw lastError;
     }
     
     // 检查PDF文件是否生成成功
