@@ -2025,42 +2025,40 @@ app.post('/api/export-selected', async (req, res) => {
     // 根据设备类型选择导出方式
     let exportResult;
     
-    if (deviceType === 'mobile' || exportMode === 'mobile-optimized') {
-      // 移动端：使用移动端优化导出，既保持格式又写入数据
-      console.log('📱 使用移动端优化模式：格式保持+数据写入');
+    // 统一使用ExcelJS导出策略，确保所有设备格式一致性
+    console.log(`💻 使用统一ExcelJS导出模式：确保跨设备格式一致性`);
+    try {
+      await exportSelectedWithExcelJS(templatePath, filepath, records);
+      exportResult = { 
+        excelFile: filepath, 
+        preservedFormat: true, 
+        dataWritten: true,
+        exportMethod: 'ExcelJS-Unified'
+      };
+      console.log('✅ ExcelJS统一导出成功，格式与桌面端完全一致');
+    } catch (excelJSError) {
+      console.log('⚠️ ExcelJS导出失败，使用XLSX库回退模式');
+      console.error('ExcelJS错误:', excelJSError.message);
+      
+      // 回退到XLSX模式，但添加格式警告
       try {
         exportResult = await exportSelectedMobileOptimized(templatePath, filepath, records, deviceInfo);
-      } catch (mobileError) {
-        console.log('⚠️ 移动端优化导出失败，回退到纯模板复制模式');
-        console.error('移动端导出错误:', mobileError.message);
+        exportResult.formatWarning = 'XLSX库可能存在格式差异，建议使用桌面端导出获得最佳格式效果';
+      } catch (xlsxError) {
+        console.log('⚠️ XLSX导出也失败，使用纯模板复制模式');
+        console.error('XLSX错误:', xlsxError.message);
         exportResult = await exportSelectedPureTemplate(templatePath, filepath, records, deviceInfo);
-      }
-    } else if (deviceType === 'tablet' || exportMode === 'tablet-optimized') {
-      // 平板：使用移动端优化导出，确保兼容性
-      console.log('📱 使用平板优化模式：格式保持+数据写入');
-      try {
-        exportResult = await exportSelectedMobileOptimized(templatePath, filepath, records, deviceInfo);
-      } catch (tabletError) {
-        console.log('⚠️ 平板优化导出失败，回退到纯模板复制模式');
-        console.error('平板导出错误:', tabletError.message);
-        exportResult = await exportSelectedPureTemplate(templatePath, filepath, records, deviceInfo);
-      }
-    } else {
-      // 桌面端：可以尝试ExcelJS，但如果失败则回退到移动端优化模式
-      console.log('💻 使用桌面标准模式：ExcelJS + 回退机制');
-      try {
-        await exportSelectedWithExcelJS(templatePath, filepath, records);
-        exportResult = { excelFile: filepath, preservedFormat: false, dataWritten: true };
-      } catch (excelJSError) {
-        console.log('⚠️ ExcelJS导出失败，回退到移动端优化模式');
-        console.error('桌面端ExcelJS错误:', excelJSError.message);
-        exportResult = await exportSelectedMobileOptimized(templatePath, filepath, records, deviceInfo);
       }
     }
     
     console.log(`📊 成功导出 ${records.length} 条记录到模板`);
-    console.log(`🎨 格式保持状态: ${exportResult.preservedFormat ? '100%原始格式' : 'ExcelJS处理格式'}`);
+    console.log(`🎨 格式保持状态: ${exportResult.exportMethod === 'ExcelJS-Unified' ? '✅ ExcelJS统一格式' : exportResult.preservedFormat ? '100%原始格式' : 'ExcelJS处理格式'}`);
     console.log(`📝 数据写入状态: ${exportResult.dataWritten ? '已写入Excel文件' : '仅提供数据映射'}`);
+    console.log(`🔧 导出方法: ${exportResult.exportMethod || 'ExcelJS-Standard'}`);
+    
+    if (exportResult.formatWarning) {
+      console.log(`⚠️ 格式警告: ${exportResult.formatWarning}`);
+    }
     
     if (exportResult.writtenCount !== undefined) {
       console.log(`✍️ 实际写入记录数: ${exportResult.writtenCount}/${records.length}`);
