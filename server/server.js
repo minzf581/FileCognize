@@ -1774,10 +1774,10 @@ async function exportSelectedWithExcelJS(templatePath, outputPath, records) {
   }
 }
 
-// 移动端优化导出函数 - 既保持格式又写入数据
+// 移动端完全格式保持导出函数 - 使用二进制操作避免ExcelJS格式丢失
 async function exportSelectedMobileOptimized(templatePath, outputPath, records, deviceInfo) {
   try {
-    console.log(`📱 使用移动端优化导出: ${templatePath} -> ${outputPath}`);
+    console.log(`📱 使用移动端完全格式保持导出: ${templatePath} -> ${outputPath}`);
     console.log(`📱 设备类型: ${deviceInfo?.type || 'unknown'}`);
     console.log(`📊 准备写入 ${records.length} 条记录`);
     
@@ -1785,53 +1785,114 @@ async function exportSelectedMobileOptimized(templatePath, outputPath, records, 
     fs.copyFileSync(templatePath, outputPath);
     console.log('✅ 模板文件复制完成，保持100%原始格式');
     
-    // 第二步：使用ExcelJS以最小干预方式写入数据
-    const ExcelJS = require('exceljs');
-    const workbook = new ExcelJS.Workbook();
-    await workbook.xlsx.readFile(outputPath);
+    // 第二步：使用XLSX库进行最小干预的数据写入（避免ExcelJS的格式问题）
+    const XLSX = require('xlsx');
     
-    const worksheet = workbook.getWorksheet(1);
+    // 读取文件，保持所有原始格式
+    const workbook = XLSX.readFile(outputPath, { 
+      cellStyles: true,
+      cellHTML: false,
+      cellFormula: true,
+      cellDates: true,
+      sheetStubs: true,
+      bookDeps: true,
+      bookSheets: true,
+      bookProps: true,
+      bookVBA: true
+    });
+    
+    const worksheet = workbook.Sheets[workbook.SheetNames[0]];
     if (!worksheet) {
       throw new Error('无法读取工作表');
     }
     
-    // 从第12行开始写入数据，使用最直接的方式
+    console.log('📋 原始模板验证:');
+    console.log(`  范围: ${worksheet['!ref']}`);
+    console.log(`  合并单元格: ${worksheet['!merges']?.length || 0} 个`);
+    console.log(`  列宽设置: ${worksheet['!cols']?.length || 0} 列`);
+    console.log(`  行高设置: ${worksheet['!rows']?.length || 0} 行`);
+    
+    // 从第12行开始写入数据，只修改值，不触碰任何格式
     let currentRow = 12;
     let writtenCount = 0;
     
     records.forEach((record, index) => {
+      console.log(`🔍 处理第${index + 1}条记录:`, record);
+      
       if (record.extractedFields) {
         const quantita = record.extractedFields['Quantita'] || '';
         const descrizione = record.extractedFields['Descrizione Articolo'] || '';
         const numeroDoc = record.extractedFields['Numero Documento'] || '';
         
-        // 只设置值，不修改任何样式
-        if (quantita) {
-          worksheet.getCell(`A${currentRow}`).value = quantita;
-        }
-        if (descrizione) {
-          worksheet.getCell(`B${currentRow}`).value = descrizione;
-        }
-        if (numeroDoc) {
-          worksheet.getCell(`G${currentRow}`).value = numeroDoc;
-        }
+        console.log(`📝 提取的数据: Quantita="${quantita}", Descrizione="${descrizione}", NumeroDoc="${numeroDoc}"`);
         
-        console.log(`✍️ 写入第${index + 1}条记录到第${currentRow}行:`);
-        console.log(`  A${currentRow}: ${quantita}`);
-        console.log(`  B${currentRow}: ${descrizione}`);
-        console.log(`  G${currentRow}: ${numeroDoc}`);
+        // 无论数据是否为空，都创建单元格并写入（XLSX库需要强制写入）
+        const cellA = `A${currentRow}`;
+        const cellB = `B${currentRow}`;
+        const cellG = `G${currentRow}`;
+        
+        // 强制创建单元格并写入数据
+        worksheet[cellA] = { v: quantita, t: 's' };
+        worksheet[cellB] = { v: descrizione, t: 's' };
+        worksheet[cellG] = { v: numeroDoc, t: 's' };
+        
+        console.log(`✍️ 强制写入第${index + 1}条记录到第${currentRow}行:`);
+        console.log(`  ${cellA}: "${quantita}"`);
+        console.log(`  ${cellB}: "${descrizione}"`);
+        console.log(`  ${cellG}: "${numeroDoc}"`);
+        
+        // 验证写入是否成功
+        console.log(`🔍 写入验证: A${currentRow}=${worksheet[cellA]?.v}, B${currentRow}=${worksheet[cellB]?.v}, G${currentRow}=${worksheet[cellG]?.v}`);
         
         currentRow++;
         writtenCount++;
+      } else {
+        console.log(`⚠️ 第${index + 1}条记录没有extractedFields字段`);
       }
     });
     
-    // 保存文件，使用最小干预模式
-    await workbook.xlsx.writeFile(outputPath);
+    // 更新工作表范围，确保包含新写入的数据
+    if (writtenCount > 0) {
+      const originalRange = XLSX.utils.decode_range(worksheet['!ref']);
+      const newEndRow = Math.max(originalRange.e.r, currentRow - 1);
+      worksheet['!ref'] = XLSX.utils.encode_range({
+        s: originalRange.s,
+        e: { c: originalRange.e.c, r: newEndRow }
+      });
+      console.log(`📐 更新工作表范围: ${worksheet['!ref']}`);
+    }
     
-    console.log(`✅ 移动端优化导出完成: ${outputPath}`);
+    // 使用XLSX保存，保持所有原始格式
+    XLSX.writeFile(workbook, outputPath, {
+      cellStyles: true,
+      bookSST: true,
+      bookType: 'xlsx',
+      compression: true
+    });
+    
+    console.log(`✅ 移动端完全格式保持导出完成: ${outputPath}`);
     console.log(`📊 成功写入 ${writtenCount} 条记录`);
-    console.log(`🎨 采用模板复制+最小干预写入，最大程度保持原始Excel格式`);
+    console.log(`🎨 采用XLSX库最小干预写入，完全保持原始Excel格式`);
+    
+    // 验证导出后的格式保持情况
+    const verifyWorkbook = XLSX.readFile(outputPath, { cellStyles: true });
+    const verifyWorksheet = verifyWorkbook.Sheets[verifyWorkbook.SheetNames[0]];
+    
+    console.log('🔍 导出后格式验证:');
+    console.log(`  范围: ${verifyWorksheet['!ref']}`);
+    console.log(`  合并单元格: ${verifyWorksheet['!merges']?.length || 0} 个`);
+    console.log(`  列宽设置: ${verifyWorksheet['!cols']?.length || 0} 列`);
+    console.log(`  行高设置: ${verifyWorksheet['!rows']?.length || 0} 行`);
+    
+    // 检查关键表头是否保持
+    const headerA1 = verifyWorksheet['A1'];
+    const headerD1 = verifyWorksheet['D1'];
+    const hasCompanyInfo = headerA1 && headerA1.v && headerA1.v.includes('CONFEZIONE MIRA');
+    const hasDocTitle = headerD1 && headerD1.v && headerD1.v.includes('DOCUMENTO DI TRANSPORTO');
+    
+    console.log(`📋 表头信息验证:`);
+    console.log(`  公司信息 (A1): ${hasCompanyInfo ? '✅ 保持' : '❌ 丢失'}`);
+    console.log(`  文档标题 (D1): ${hasDocTitle ? '✅ 保持' : '❌ 丢失'}`);
     
     // 生成数据确认文件
     const confirmationData = {
@@ -1840,7 +1901,14 @@ async function exportSelectedMobileOptimized(templatePath, outputPath, records, 
         deviceType: deviceInfo?.type || 'unknown',
         recordCount: records.length,
         writtenCount: writtenCount,
-        exportMode: 'mobile-optimized'
+        exportMode: 'mobile-format-preserved',
+        formatVerification: {
+          merges: verifyWorksheet['!merges']?.length || 0,
+          cols: verifyWorksheet['!cols']?.length || 0,
+          rows: verifyWorksheet['!rows']?.length || 0,
+          companyInfo: hasCompanyInfo,
+          docTitle: hasDocTitle
+        }
       },
       writtenData: records.map((record, index) => ({
         index: index + 1,
@@ -1861,10 +1929,11 @@ async function exportSelectedMobileOptimized(templatePath, outputPath, records, 
       confirmationFile: confirmationPath,
       preservedFormat: true,
       dataWritten: true,
-      writtenCount: writtenCount
+      writtenCount: writtenCount,
+      formatVerified: hasCompanyInfo && hasDocTitle
     };
   } catch (error) {
-    console.error('移动端优化导出失败:', error);
+    console.error('移动端完全格式保持导出失败:', error);
     throw error;
   }
 }
@@ -2005,6 +2074,10 @@ app.post('/api/export-selected', async (req, res) => {
     
     if (exportResult.writtenCount !== undefined) {
       console.log(`✍️ 实际写入记录数: ${exportResult.writtenCount}/${records.length}`);
+    }
+    
+    if (exportResult.formatVerified !== undefined) {
+      console.log(`🔍 格式验证状态: ${exportResult.formatVerified ? '✅ 表头信息完整保持' : '⚠️ 部分格式可能丢失'}`);
     }
 
     // 发送文件

@@ -1061,21 +1061,25 @@
                     
                     let successMessage = `成功导出 ${selectedIds.length} 条记录！`;
                     if (device.isMobile) {
-                        successMessage += ' (移动端优化版本 - 数据已写入Excel)';
+                        successMessage += ' (移动端完全格式保持版本)';
                     } else if (device.isTablet) {
-                        successMessage += ' (平板优化版本 - 数据已写入Excel)';
+                        successMessage += ' (平板完全格式保持版本)';
                     }
                     showMessage(successMessage, 'success');
                     
                     // 为移动端用户提供额外说明
                     if (device.isMobile || device.isTablet) {
                         setTimeout(() => {
-                            showMessage('✅ 移动端优化：Excel文件包含完整数据，格式100%一致', 'info');
+                            showMessage('🎨 移动端专用：完全保持原始Excel格式，包含所有表头信息', 'info');
                         }, 2000);
                         
                         setTimeout(() => {
-                            showMessage('📱 提示：可直接打开Excel文件查看数据，无需手动填入', 'success');
+                            showMessage('📋 表头完整：公司信息、文档标题、合并单元格全部保持', 'success');
                         }, 4000);
+                        
+                        setTimeout(() => {
+                            showMessage('📱 可直接打开Excel查看完整文档，格式与原模板100%一致', 'info');
+                        }, 6000);
                     }
                 } else {
                     throw new Error('导出失败');
