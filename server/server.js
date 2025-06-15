@@ -40,23 +40,31 @@ async function convertExcelToPDF(excelPath, pdfPath) {
       libreOfficeCommand = 'libreoffice';
     }
     
-    // 设置环境变量以确保字体正确显示
+    // 设置环境变量以确保LibreOffice在云环境中稳定运行
     const env = {
       ...process.env,
       'LC_ALL': 'en_US.UTF-8',
       'LANG': 'en_US.UTF-8',
-      'SAL_USE_VCLPLUGIN': 'gen'
+      'SAL_USE_VCLPLUGIN': 'gen',
+      'LIBREOFFICE_HEADLESS': 'true',
+      'HOME': '/tmp', // 确保有写权限的home目录
+      'TMPDIR': '/tmp'
     };
     
-    const command = `${libreOfficeCommand} --headless --convert-to pdf --outdir "${outputDir}" "${excelPath}"`;
+    // 为Railway环境优化的LibreOffice命令参数
+    const command = `${libreOfficeCommand} --headless --invisible --nodefault --nolockcheck --nologo --norestore --convert-to pdf --outdir "${outputDir}" "${excelPath}"`;
     
     console.log(`🔧 执行命令: ${command}`);
     console.log(`🖥️ 操作系统: ${process.platform}`);
     console.log(`📁 输出目录: ${outputDir}`);
     console.log(`📄 输入文件: ${excelPath}`);
+    console.log(`🌐 云环境优化: ${process.env.RAILWAY_ENVIRONMENT ? 'Railway' : '本地'}`);
     
-    // 执行转换命令，使用设置的环境变量
-    const { stdout, stderr } = await execAsync(command, { env });
+    // 执行转换命令，增加超时设置
+    const { stdout, stderr } = await execAsync(command, { 
+      env,
+      timeout: 30000 // 30秒超时
+    });
     
     if (stderr) {
       console.log(`⚠️ LibreOffice警告: ${stderr}`);
@@ -99,124 +107,7 @@ async function convertExcelToPDF(excelPath, pdfPath) {
   }
 }
 
-// 备用PDF生成函数 - 当LibreOffice不可用时使用
-async function generateFallbackPDF(excelPath, pdfPath) {
-  try {
-    console.log('📝 使用备用方案生成PDF（无需LibreOffice）');
-    
-    // 读取Excel文件
-    const workbook = new ExcelJS.Workbook();
-    await workbook.xlsx.readFile(excelPath);
-    const worksheet = workbook.getWorksheet(1);
-    
-    // 创建简单的HTML内容
-    let htmlContent = `
-<!DOCTYPE html>
-<html>
-<head>
-    <meta charset="UTF-8">
-    <title>FileCognize 打印文档</title>
-    <style>
-        body {
-            font-family: Arial, sans-serif;
-            margin: 20px;
-            line-height: 1.6;
-        }
-        .header {
-            text-align: center;
-            margin-bottom: 30px;
-            border-bottom: 2px solid #333;
-            padding-bottom: 10px;
-        }
-        .record {
-            margin-bottom: 20px;
-            padding: 15px;
-            border: 1px solid #ddd;
-            border-radius: 5px;
-        }
-        .field {
-            margin-bottom: 8px;
-        }
-        .label {
-            font-weight: bold;
-            color: #333;
-        }
-        .value {
-            margin-left: 10px;
-            color: #666;
-        }
-        @media print {
-            body { margin: 0; }
-            .record { page-break-inside: avoid; }
-        }
-    </style>
-</head>
-<body>
-    <div class="header">
-        <h1>FileCognize 文档识别结果</h1>
-        <p>生成时间: ${new Date().toLocaleString('zh-CN')}</p>
-    </div>
-`;
 
-    // 遍历Excel数据并生成HTML
-    let recordCount = 0;
-    worksheet.eachRow((row, rowNumber) => {
-      if (rowNumber >= 11 && rowNumber <= 20) { // 数据行范围
-        const quantita = getCellValue(worksheet, `A${rowNumber}`);
-        const descrizione = getCellValue(worksheet, `B${rowNumber}`);
-        const numero = getCellValue(worksheet, `G${rowNumber}`);
-        
-        if (quantita || descrizione || numero) {
-          recordCount++;
-          htmlContent += `
-    <div class="record">
-        <h3>记录 ${recordCount}</h3>
-        <div class="field">
-            <span class="label">Numero Documento:</span>
-            <span class="value">${numero || 'N/A'}</span>
-        </div>
-        <div class="field">
-            <span class="label">Quantita:</span>
-            <span class="value">${quantita || 'N/A'}</span>
-        </div>
-        <div class="field">
-            <span class="label">Descrizione Articolo:</span>
-            <span class="value">${descrizione || 'N/A'}</span>
-        </div>
-    </div>`;
-        }
-      }
-    });
-
-    htmlContent += `
-    <div style="margin-top: 30px; text-align: center; color: #999; font-size: 12px;">
-        <p>本文档由 FileCognize 系统自动生成</p>
-        <p>总计 ${recordCount} 条记录</p>
-    </div>
-</body>
-</html>`;
-
-    // 将HTML写入临时文件
-    const htmlPath = pdfPath.replace('.pdf', '.html');
-    fs.writeFileSync(htmlPath, htmlContent, 'utf8');
-    
-    console.log(`📄 生成HTML文件: ${htmlPath}`);
-    console.log(`📊 包含 ${recordCount} 条记录`);
-    
-    // 简单地将HTML路径返回，用户可以在浏览器中打开并打印
-    // 或者可以集成puppeteer等无头浏览器来生成PDF
-    
-    // 暂时将HTML文件复制为PDF文件名（这样至少有个文件可以下载）
-    fs.copyFileSync(htmlPath, pdfPath.replace('.pdf', '_print.html'));
-    
-    console.log('✅ 备用PDF生成完成（HTML格式）');
-    return htmlPath;
-    
-  } catch (error) {
-    console.error('❌ 备用PDF生成失败:', error);
-    throw error;
-  }
-}
 
 // 修复Excel文件中的字体设置
 async function fixExcelFonts(excelPath) {
@@ -2016,39 +1907,22 @@ app.post('/api/print-selected', async (req, res) => {
     // 使用ExcelJS导出选中记录到Excel
     await exportSelectedWithExcelJS(templatePath, tempExcelPath, records);
     
-    // 尝试将Excel转换为PDF，失败时使用备用方案
-    let finalFilePath = pdfPath;
-    let contentType = 'application/pdf';
-    let isHtmlFallback = false;
+    // 将Excel转换为PDF
+    await convertExcelToPDF(tempExcelPath, pdfPath);
     
-    try {
-      await convertExcelToPDF(tempExcelPath, pdfPath);
-      console.log(`✅ PDF打印文件准备完成: ${pdfPath}`);
-    } catch (pdfError) {
-      console.log('⚠️ PDF转换失败，使用HTML备用方案:', pdfError.message);
-      
-      // 使用备用HTML生成方案
-      const htmlPath = await generateFallbackPDF(tempExcelPath, pdfPath);
-      finalFilePath = htmlPath;
-      contentType = 'text/html; charset=utf-8';
-      isHtmlFallback = true;
-      
-      console.log(`✅ HTML打印文件准备完成: ${htmlPath}`);
-    }
+    console.log(`✅ PDF打印文件准备完成: ${pdfPath}`);
     
-    // 设置响应头
-    res.setHeader('Content-Type', contentType);
-    const finalFilename = isHtmlFallback ? pdfFilename.replace('.pdf', '.html') : pdfFilename;
-    res.setHeader('Content-Disposition', `inline; filename="${finalFilename}"`);
+    // 设置响应头为PDF文件
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader('Content-Disposition', `inline; filename="${pdfFilename}"`);
     
-    // 发送文件
-    res.sendFile(finalFilePath, (err) => {
+    // 发送PDF文件
+    res.sendFile(pdfPath, (err) => {
       if (err) {
         console.error('PDF文件发送失败:', err);
         res.status(500).json({ success: false, message: 'PDF文件发送失败' });
       } else {
-        const fileTypeStr = isHtmlFallback ? 'HTML打印文件' : 'PDF打印文件';
-        console.log(`📤 ${fileTypeStr}发送成功: ${finalFilename}`);
+        console.log(`📤 PDF打印文件发送成功: ${pdfFilename}`);
         console.log(`📊 包含 ${records.length} 条选中记录`);
         
         // 延迟删除临时文件
@@ -2058,13 +1932,9 @@ app.post('/api/print-selected', async (req, res) => {
               fs.unlinkSync(tempExcelPath);
               console.log(`🗑️ 临时Excel文件已删除: ${tempExcelFilename}`);
             }
-            if (fs.existsSync(finalFilePath)) {
-              fs.unlinkSync(finalFilePath);
-              console.log(`🗑️ 临时${fileTypeStr}已删除: ${finalFilename}`);
-            }
-            // 如果有HTML备用文件，也清理它
-            if (isHtmlFallback && fs.existsSync(finalFilePath.replace('.html', '.pdf'))) {
-              fs.unlinkSync(finalFilePath.replace('.html', '.pdf'));
+            if (fs.existsSync(pdfPath)) {
+              fs.unlinkSync(pdfPath);
+              console.log(`🗑️ 临时PDF文件已删除: ${pdfFilename}`);
             }
           } catch (deleteErr) {
             console.error('删除临时文件失败:', deleteErr);
