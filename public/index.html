@@ -764,10 +764,49 @@
             }
         }
 
+        // 格式化识别数据
+        function formatRecognizedData(extractedFields) {
+            const formatted = { ...extractedFields };
+            
+            // 1. Quantita前面加上"N'"表示根数
+            if (formatted['Quantita'] && formatted['Quantita'] !== '未识别') {
+                const quantita = formatted['Quantita'].toString().trim();
+                if (quantita && !quantita.startsWith('N\'')) {
+                    formatted['Quantita'] = `N' ${quantita}`;
+                    console.log(`📊 格式化Quantita: ${extractedFields['Quantita']} → ${formatted['Quantita']}`);
+                }
+            }
+            
+            // 2. Descrizione Articolo 特殊处理
+            if (formatted['Descrizione Articolo'] && formatted['Descrizione Articolo'] !== '未识别') {
+                let descrizione = formatted['Descrizione Articolo'].toString().trim();
+                
+                // 替换 "A SCORCIARE" 为 "DA SCORCIARE"
+                if (descrizione.includes('A SCORCIARE')) {
+                    descrizione = descrizione.replace('A SCORCIARE', 'DA SCORCIARE');
+                    console.log(`📝 替换内容: A SCORCIARE → DA SCORCIARE`);
+                }
+                
+                // 后面加上"DDT"表示单据
+                if (!descrizione.endsWith(' DDT')) {
+                    descrizione = `${descrizione} DDT`;
+                    console.log(`📝 添加DDT标识: ${formatted['Descrizione Articolo']} → ${descrizione}`);
+                }
+                
+                formatted['Descrizione Articolo'] = descrizione;
+            }
+            
+            return formatted;
+        }
+
         // 显示识别结果
         function displayResult(data) {
+            // 格式化识别数据
+            const formattedFields = formatRecognizedData(data.extractedFields);
+            
             currentData = {
                 ...data,
+                extractedFields: formattedFields, // 使用格式化后的数据
                 timestamp: new Date().toISOString()
             };
 
@@ -775,7 +814,7 @@
             const fields = ['Numero Documento', 'Quantita', 'Descrizione Articolo'];
             
             fields.forEach(field => {
-                const value = data.extractedFields[field] || '未识别';
+                const value = formattedFields[field] || '未识别';
                 html += `
                     <div class="field-item">
                         <div class="field-label">${field}:</div>
@@ -791,7 +830,7 @@
             document.getElementById('editBtn').disabled = false;
             document.getElementById('addToHistoryBtn').disabled = false;
 
-            showMessage('文档识别完成！您可以编辑结果或添加到历史记录。', 'success');
+            showMessage('文档识别完成！数据已自动格式化。', 'success');
         }
 
         // 编辑数据
@@ -814,18 +853,24 @@
             const quantita = document.getElementById('editQuantita').value.trim();
             const descrizioneArticolo = document.getElementById('editDescrizioneArticolo').value.trim();
 
-            // 更新当前数据
-            currentData.extractedFields = {
+            // 原始数据（编辑前的数据）
+            const rawFields = {
                 'Numero Documento': numeroDocumento,
                 'Quantita': quantita,
                 'Descrizione Articolo': descrizioneArticolo
             };
 
+            // 应用格式化规则
+            const formattedFields = formatRecognizedData(rawFields);
+
+            // 更新当前数据
+            currentData.extractedFields = formattedFields;
+
             // 重新显示结果
             displayResult(currentData);
             cancelEdit();
             
-            showMessage('数据已保存！', 'success');
+            showMessage('数据已保存并格式化！', 'success');
         }
 
         // 取消编辑

@@ -175,6 +175,49 @@ const DEFAULT_TEMPLATE = {
   }
 };
 
+// 格式化识别数据函数
+function formatRecognizedData(extractedFields) {
+  const formatted = { ...extractedFields };
+  
+  console.log('🔧 开始格式化识别数据:', Object.keys(formatted));
+  
+  // 1. Quantita前面加上"N'"表示根数
+  if (formatted['Quantita'] && formatted['Quantita'] !== '未识别') {
+    const quantita = formatted['Quantita'].toString().trim();
+    if (quantita && !quantita.startsWith('N\'')) {
+      const oldValue = formatted['Quantita'];
+      formatted['Quantita'] = `N' ${quantita}`;
+      console.log(`📊 格式化Quantita: ${oldValue} → ${formatted['Quantita']}`);
+    }
+  }
+  
+  // 2. Descrizione Articolo 特殊处理
+  if (formatted['Descrizione Articolo'] && formatted['Descrizione Articolo'] !== '未识别') {
+    let descrizione = formatted['Descrizione Articolo'].toString().trim();
+    const originalDescrizione = descrizione;
+    
+    // 替换 "A SCORCIARE" 为 "DA SCORCIARE"
+    if (descrizione.includes('A SCORCIARE')) {
+      descrizione = descrizione.replace(/A SCORCIARE/g, 'DA SCORCIARE');
+      console.log(`📝 替换内容: A SCORCIARE → DA SCORCIARE`);
+    }
+    
+    // 后面加上"DDT"表示单据
+    if (!descrizione.endsWith(' DDT')) {
+      descrizione = `${descrizione} DDT`;
+      console.log(`📝 添加DDT标识`);
+    }
+    
+    if (descrizione !== originalDescrizione) {
+      formatted['Descrizione Articolo'] = descrizione;
+      console.log(`📝 Descrizione最终结果: ${originalDescrizione} → ${descrizione}`);
+    }
+  }
+  
+  console.log('✅ 数据格式化完成');
+  return formatted;
+}
+
 // 分析模板结构的辅助函数 - 精确提取指定字段
 function analyzeTemplateStructure(text) {
   try {
@@ -1109,6 +1152,9 @@ app.post('/api/ocr-and-process', upload.single('file'), async (req, res) => {
       console.log(`📊 识别结果: 提取到 ${Object.keys(extractedData).length} 个字段`);
       if (Object.keys(extractedData).length > 0) {
         console.log('📄 提取的字段:', Object.keys(extractedData));
+        
+        // 应用数据格式化规则
+        extractedData = formatRecognizedData(extractedData);
       }
     } catch (ocrError) {
       console.error('❌ OCR识别失败:', ocrError.message);
@@ -1145,7 +1191,7 @@ app.post('/api/ocr-and-process', upload.single('file'), async (req, res) => {
       }
       
       global.documentSessions[sessionId].documents.push({
-        extractedData: extractedData,
+        extractedData: extractedData, // 已经格式化过的数据
         filename: req.file.originalname,
         addedAt: new Date()
       });
@@ -1242,6 +1288,9 @@ app.post('/api/pdf-ocr-and-process', upload.single('file'), async (req, res) => 
           
           if (Object.keys(extractedData).length > 0) {
             console.log('OCR识别成功，提取到字段:', Object.keys(extractedData));
+            
+            // 应用数据格式化规则
+            extractedData = formatRecognizedData(extractedData);
             
             // 如果提供了sessionId，直接添加到会话中
             if (sessionId) {
