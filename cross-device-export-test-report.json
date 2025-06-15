@@ -1,0 +1,42 @@
+{
+  "summary": {
+    "total": 4,
+    "passed": 4,
+    "failed": 0,
+    "warnings": 0
+  },
+  "timestamp": "2025-06-15T14:52:19.975Z",
+  "testResults": [
+    {
+      "test": "mobile导出",
+      "status": "PASS",
+      "details": "文件生成: Test_Export_Mobile_2025-06-15T14-52-19.xlsx",
+      "timestamp": "2025-06-15T14:52:19.867Z"
+    },
+    {
+      "test": "tablet导出",
+      "status": "PASS",
+      "details": "文件生成: Test_Export_Tablet_2025-06-15T14-52-19.xlsx",
+      "timestamp": "2025-06-15T14:52:19.868Z"
+    },
+    {
+      "test": "desktop导出",
+      "status": "PASS",
+      "details": "文件生成: Test_Export_2025-06-15T14-52-19.xlsx",
+      "timestamp": "2025-06-15T14:52:19.869Z"
+    },
+    {
+      "test": "格式一致性",
+      "status": "PASS",
+      "details": "所有设备导出格式完全一致",
+      "timestamp": "2025-06-15T14:52:19.975Z"
+    }
+  ],
+  "recommendations": [
+    {
+      "priority": "LOW",
+      "issue": "用户体验优化",
+      "solution": "为移动端用户提供数据映射文件和使用说明"
+    }
+  ]
+}

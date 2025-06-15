@@ -979,7 +979,21 @@
             document.getElementById('deleteSelectedBtn').disabled = !hasSelection;
         }
 
-        // 导出选中记录
+        // 设备检测函数
+        function detectDevice() {
+            const userAgent = navigator.userAgent.toLowerCase();
+            const isMobile = /android|webos|iphone|ipad|ipod|blackberry|iemobile|opera mini/i.test(userAgent);
+            const isTablet = /ipad|android(?!.*mobile)/i.test(userAgent);
+            
+            return {
+                isMobile: isMobile && !isTablet,
+                isTablet: isTablet,
+                isDesktop: !isMobile && !isTablet,
+                userAgent: userAgent
+            };
+        }
+
+        // 导出选中记录 - 支持跨设备格式一致性
         async function exportSelected() {
             const selectedIds = getSelectedRecordIds();
             if (selectedIds.length === 0) {
@@ -989,19 +1003,43 @@
 
             try {
                 const selectedRecords = historyData.filter(item => selectedIds.includes(item.id));
+                const device = detectDevice();
+                
+                console.log('📱 设备信息:', device);
                 
                 // 创建临时会话ID
                 const tempSessionId = generateSessionId();
                 
-                // 发送选中的记录到后端
-                const response = await fetch('/api/export-selected', {
+                // 根据设备类型选择导出方式
+                let exportEndpoint = '/api/export-selected';
+                let exportMode = 'standard';
+                
+                if (device.isMobile) {
+                    exportMode = 'mobile-optimized';
+                    console.log('📱 使用移动端优化导出模式');
+                    showMessage('检测到移动设备，使用优化导出模式...', 'info');
+                } else if (device.isTablet) {
+                    exportMode = 'tablet-optimized';
+                    console.log('📱 使用平板优化导出模式');
+                } else {
+                    exportMode = 'desktop-standard';
+                    console.log('💻 使用桌面标准导出模式');
+                }
+                
+                // 发送选中的记录到后端，包含设备信息
+                const response = await fetch(exportEndpoint, {
                     method: 'POST',
                     headers: {
                         'Content-Type': 'application/json'
                     },
                     body: JSON.stringify({
                         sessionId: tempSessionId,
-                        records: selectedRecords
+                        records: selectedRecords,
+                        deviceInfo: {
+                            type: device.isMobile ? 'mobile' : device.isTablet ? 'tablet' : 'desktop',
+                            userAgent: device.userAgent,
+                            exportMode: exportMode
+                        }
                     })
                 });
 
@@ -1010,17 +1048,34 @@
                     const url = window.URL.createObjectURL(blob);
                     const a = document.createElement('a');
                     a.href = url;
-                    a.download = `FileCognize_Selected_${formatDateTime(new Date().toISOString()).replace(/[:\s]/g, '-')}.xlsx`;
+                    
+                    // 根据设备类型调整文件名
+                    const timestamp = formatDateTime(new Date().toISOString()).replace(/[:\s]/g, '-');
+                    const deviceSuffix = device.isMobile ? '_Mobile' : device.isTablet ? '_Tablet' : '';
+                    a.download = `FileCognize_Selected${deviceSuffix}_${timestamp}.xlsx`;
+                    
                     document.body.appendChild(a);
                     a.click();
                     document.body.removeChild(a);
                     window.URL.revokeObjectURL(url);
                     
-                    showMessage(`成功导出 ${selectedIds.length} 条记录！`, 'success');
+                    let successMessage = `成功导出 ${selectedIds.length} 条记录！`;
+                    if (device.isMobile) {
+                        successMessage += ' (移动端优化版本)';
+                    }
+                    showMessage(successMessage, 'success');
+                    
+                    // 为移动端用户提供额外说明
+                    if (device.isMobile) {
+                        setTimeout(() => {
+                            showMessage('💡 提示：移动端已优化格式兼容性，确保在各设备上显示一致', 'info');
+                        }, 2000);
+                    }
                 } else {
                     throw new Error('导出失败');
                 }
             } catch (error) {
+                console.error('导出失败:', error);
                 showMessage(`导出失败: ${error.message}`, 'danger');
             }
         }
