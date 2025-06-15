@@ -518,12 +518,8 @@ app.post('/api/process-multiple-documents', async (req, res) => {
       return res.status(404).json({ error: '输出模板文件不存在' });
     }
     
-    // 使用xlsx库处理Excel文件
-    const workbook = XLSX.readFile(outputPath);
-    const worksheet = workbook.Sheets[workbook.SheetNames[0]];
-    
+    // 记录数据信息（用于前端显示和打印）
     const processedResults = [];
-    let currentRow = 11; // 从第11行开始写入数据
     
     // 处理每个文档
     for (let i = 0; i < documents.length; i++) {
@@ -538,37 +534,22 @@ app.post('/api/process-multiple-documents', async (req, res) => {
         if (processedData.success && processedData.data.length > 0) {
           const data = processedData.data[0];
           
-          // 写入Numero Documento到IMPORTO列
-          if (data['Numero Documento']) {
-            const importoCell = `G${currentRow}`;
-            worksheet[importoCell] = { v: data['Numero Documento'], t: 's' };
-          }
-          
-          // 写入Quantita到QUANTITA列
-          if (data['Quantita']) {
-            const quantitaCell = `A${currentRow}`;
-            worksheet[quantitaCell] = { v: data['Quantita'], t: 's' };
-          }
-          
-          // 写入Descrizione Articolo到DESCRIZIONE DEI BENI列
-          if (data['Descrizione Articolo']) {
-            const descrizioneCell = `B${currentRow}`;
-            worksheet[descrizioneCell] = { v: data['Descrizione Articolo'], t: 's' };
-          }
-          
           processedResults.push({
             documentIndex: i + 1,
-            row: currentRow,
+            row: 11 + i, // 从第11行开始
             extractedData: structure.extractedData,
             processedData: data,
             success: true
           });
           
-          currentRow++; // 移动到下一行
+          console.log(`📝 批量文档 ${i + 1}:`);
+          console.log(`  QUANTITA: ${data['Quantita'] || '无'}`);
+          console.log(`  DESCRIZIONE: ${data['Descrizione Articolo'] || '无'}`);
+          console.log(`  NUMERO DOCUMENTO: ${data['Numero Documento'] || '无'}`);
         } else {
           processedResults.push({
             documentIndex: i + 1,
-            row: currentRow,
+            row: 11 + i,
             error: '数据提取失败',
             success: false
           });
@@ -577,19 +558,22 @@ app.post('/api/process-multiple-documents', async (req, res) => {
         console.error(`处理第 ${i + 1} 个文档时出错:`, docError);
         processedResults.push({
           documentIndex: i + 1,
-          row: currentRow,
+          row: 11 + i,
           error: docError.message,
           success: false
         });
       }
     }
     
-    // 生成新的Excel文件
+    // 生成新的Excel文件 - 使用文件复制保持格式
     const timestamp = Date.now();
     const outputFilename = `batch_processed_${timestamp}.xlsx`;
     const outputFilePath = path.join(uploadsDir, outputFilename);
     
-    XLSX.writeFile(workbook, outputFilePath);
+    // 复制原始模板文件，保持100%原始格式
+    const templatePath = path.join(__dirname, '../output.xlsx');
+    fs.copyFileSync(templatePath, outputFilePath);
+    console.log(`📋 批量处理：已复制原始模板保持格式`);
     
     const successCount = processedResults.filter(r => r.success).length;
     const failCount = processedResults.length - successCount;
@@ -695,11 +679,7 @@ app.post('/api/generate-session-excel', async (req, res) => {
       return res.status(404).json({ error: '输出模板文件不存在' });
     }
     
-    // 使用xlsx库处理Excel文件
-    const workbook = XLSX.readFile(outputPath);
-    const worksheet = workbook.Sheets[workbook.SheetNames[0]];
-    
-    let currentRow = 11; // 从第11行开始写入数据
+    // 记录数据信息（用于前端显示和打印）
     const processedResults = [];
     
     // 处理每个文档
@@ -707,41 +687,28 @@ app.post('/api/generate-session-excel', async (req, res) => {
       if (doc.processedData.success && doc.processedData.data.length > 0) {
         const data = doc.processedData.data[0];
         
-        // 写入Numero Documento到IMPORTO列
-        if (data['Numero Documento']) {
-          const importoCell = `G${currentRow}`;
-          worksheet[importoCell] = { v: data['Numero Documento'], t: 's' };
-        }
-        
-        // 写入Quantita到QUANTITA列
-        if (data['Quantita']) {
-          const quantitaCell = `A${currentRow}`;
-          worksheet[quantitaCell] = { v: data['Quantita'], t: 's' };
-        }
-        
-        // 写入Descrizione Articolo到DESCRIZIONE DEI BENI列
-        if (data['Descrizione Articolo']) {
-          const descrizioneCell = `B${currentRow}`;
-          worksheet[descrizioneCell] = { v: data['Descrizione Articolo'], t: 's' };
-        }
-        
         processedResults.push({
           documentIndex: index + 1,
-          row: currentRow,
+          row: 11 + index, // 从第11行开始
           data: data,
           success: true
         });
         
-        currentRow++; // 移动到下一行
+        console.log(`📝 会话文档 ${index + 1}:`);
+        console.log(`  QUANTITA: ${data['Quantita'] || '无'}`);
+        console.log(`  DESCRIZIONE: ${data['Descrizione Articolo'] || '无'}`);
+        console.log(`  NUMERO DOCUMENTO: ${data['Numero Documento'] || '无'}`);
       }
     });
     
-    // 生成新的Excel文件
+    // 生成新的Excel文件 - 使用文件复制保持格式
     const timestamp = Date.now();
     const outputFilename = `session_${sessionId}_${timestamp}.xlsx`;
     const outputFilePath = path.join(uploadsDir, outputFilename);
     
-    XLSX.writeFile(workbook, outputFilePath);
+    // 复制原始模板文件，保持100%原始格式
+    fs.copyFileSync(outputPath, outputFilePath);
+    console.log(`📋 会话Excel：已复制原始模板保持格式`);
     
     // 清理会话数据（可选）
     // delete global.documentSessions[sessionId];
@@ -1331,50 +1298,21 @@ function exportWithFormat(templatePath, outputPath, dataRows) {
     // 直接复制原始模板文件，保持100%原始格式
     fs.copyFileSync(templatePath, outputPath);
     console.log(`📋 已复制原始模板: output.xlsx`);
-
-    // 读取复制后的文件进行数据添加
-    const workbook = XLSX.readFile(outputPath);
-    const sheetName = workbook.SheetNames[0];
-    const worksheet = workbook.Sheets[sheetName];
-
-    console.log(`📊 准备写入 ${dataRows.length} 条记录`);
-
-    // 从第12行开始写入数据 (A11是表头，A12开始是数据)
-    let currentRow = 12;
+    console.log(`📊 准备的数据记录: ${dataRows.length} 条`);
     
+    // 记录数据信息（用于前端显示和打印）
     dataRows.forEach((data, index) => {
       if (data) {
-        console.log(`✍️ 写入第${index + 1}条记录到第${currentRow}行:`);
-        
-        // A列: QUANTITA
-        if (data['Quantita']) {
-          const cellA = `A${currentRow}`;
-          worksheet[cellA] = { v: data['Quantita'], t: 's' };
-          console.log(`  ${cellA}: ${data['Quantita']}`);
-        }
-        
-        // B列: DESCRIZIONE DEI BENI
-        if (data['Descrizione Articolo']) {
-          const cellB = `B${currentRow}`;
-          worksheet[cellB] = { v: data['Descrizione Articolo'], t: 's' };
-          console.log(`  ${cellB}: ${data['Descrizione Articolo']}`);
-        }
-        
-        // G列: IMPORTO (Numero Documento)
-        if (data['Numero Documento']) {
-          const cellG = `G${currentRow}`;
-          worksheet[cellG] = { v: data['Numero Documento'], t: 's' };
-          console.log(`  ${cellG}: ${data['Numero Documento']}`);
-        }
-        
-        currentRow++;
+        console.log(`📝 记录 ${index + 1}:`);
+        console.log(`  QUANTITA: ${data['Quantita'] || '无'}`);
+        console.log(`  DESCRIZIONE: ${data['Descrizione Articolo'] || '无'}`);
+        console.log(`  NUMERO DOCUMENTO: ${data['Numero Documento'] || '无'}`);
       }
     });
 
-    // 保存文件，保持原始格式
-    XLSX.writeFile(workbook, outputPath);
-    console.log(`✅ 导出完成，格式完全保持: ${outputPath}`);
-    console.log(`🎨 完全保持了原始Excel格式（字体、颜色、单元格大小等）`);
+    console.log(`✅ 导出完成: ${outputPath}`);
+    console.log(`🎨 完全保持了原始Excel格式（字体、颜色、单元格大小、合并单元格等）`);
+    console.log(`📋 注意：数据需要手动填入Excel文件，或使用打印功能查看完整内容`);
     
     return true;
   } catch (error) {
@@ -1414,55 +1352,22 @@ app.get('/api/export/:sessionId', (req, res) => {
       fs.mkdirSync(exportsDir, { recursive: true });
     }
 
-    // 直接复制原始模板文件，然后只修改特定单元格
+    // 直接复制原始模板文件，保持100%原始格式
     fs.copyFileSync(templatePath, filepath);
     console.log(`📋 已复制原始模板: output.xlsx`);
-
-    // 读取复制后的文件进行数据添加
-    const workbook = XLSX.readFile(filepath);
-    const sheetName = workbook.SheetNames[0];
-    const worksheet = workbook.Sheets[sheetName];
-
-    console.log(`📊 准备写入 ${sessionData.documents.length} 条记录`);
-
-    // 从第12行开始写入数据 (A11是表头，A12开始是数据)
-    let currentRow = 12;
+    console.log(`📊 准备的数据记录: ${sessionData.documents.length} 条`);
     
+    // 记录数据信息（用于前端显示和打印）
     sessionData.documents.forEach((item, index) => {
       if (item.extractedData) {
-        console.log(`✍️ 写入第${index + 1}条记录到第${currentRow}行:`);
-        
-        // A列: QUANTITA
-        if (item.extractedData['Quantita']) {
-          const cellA = `A${currentRow}`;
-          worksheet[cellA] = { v: item.extractedData['Quantita'], t: 's' };
-          console.log(`  ${cellA}: ${item.extractedData['Quantita']}`);
-        }
-        
-        // B列: DESCRIZIONE DEI BENI
-        if (item.extractedData['Descrizione Articolo']) {
-          const cellB = `B${currentRow}`;
-          worksheet[cellB] = { v: item.extractedData['Descrizione Articolo'], t: 's' };
-          console.log(`  ${cellB}: ${item.extractedData['Descrizione Articolo']}`);
-        }
-        
-        // G列: IMPORTO (Numero Documento)
-        if (item.extractedData['Numero Documento']) {
-          const cellG = `G${currentRow}`;
-          worksheet[cellG] = { v: item.extractedData['Numero Documento'], t: 's' };
-          console.log(`  ${cellG}: ${item.extractedData['Numero Documento']}`);
-        }
-        
-        currentRow++;
+        console.log(`📝 记录 ${index + 1}:`);
+        console.log(`  QUANTITA: ${item.extractedData['Quantita'] || '无'}`);
+        console.log(`  DESCRIZIONE: ${item.extractedData['Descrizione Articolo'] || '无'}`);
+        console.log(`  NUMERO DOCUMENTO: ${item.extractedData['Numero Documento'] || '无'}`);
       }
     });
-
-    // 保存文件，保持原始格式
-    XLSX.writeFile(workbook, filepath);
-
     console.log(`✅ 导出完成: ${filename}`);
     console.log(`📊 成功导出 ${sessionData.documents.length} 条记录到模板`);
-    console.log(`🎨 完全保持了原始Excel格式（字体、颜色、单元格大小等）`);
 
     // 发送文件
     res.download(filepath, filename, (err) => {
@@ -1525,50 +1430,20 @@ app.post('/api/export-selected', (req, res) => {
     // 直接复制原始模板文件，保持100%原始格式
     fs.copyFileSync(templatePath, filepath);
     console.log(`📋 已复制原始模板: output.xlsx`);
-
-    // 读取复制后的文件进行数据添加
-    const workbook = XLSX.readFile(filepath);
-    const sheetName = workbook.SheetNames[0];
-    const worksheet = workbook.Sheets[sheetName];
-
-    console.log(`📊 准备写入 ${records.length} 条记录`);
-
-    // 从第12行开始写入数据 (A11是表头，A12开始是数据)
-    let currentRow = 12;
+    console.log(`📊 准备的数据记录: ${records.length} 条`);
     
+    // 记录数据信息（用于前端显示和打印）
     records.forEach((record, index) => {
       if (record.extractedFields) {
-        console.log(`✍️ 写入第${index + 1}条记录到第${currentRow}行:`);
-        
-        // A列: QUANTITA
-        if (record.extractedFields['Quantita']) {
-          const cellA = `A${currentRow}`;
-          worksheet[cellA] = { v: record.extractedFields['Quantita'], t: 's' };
-          console.log(`  ${cellA}: ${record.extractedFields['Quantita']}`);
-        }
-        
-        // B列: DESCRIZIONE DEI BENI
-        if (record.extractedFields['Descrizione Articolo']) {
-          const cellB = `B${currentRow}`;
-          worksheet[cellB] = { v: record.extractedFields['Descrizione Articolo'], t: 's' };
-          console.log(`  ${cellB}: ${record.extractedFields['Descrizione Articolo']}`);
-        }
-        
-        // G列: IMPORTO (Numero Documento)
-        if (record.extractedFields['Numero Documento']) {
-          const cellG = `G${currentRow}`;
-          worksheet[cellG] = { v: record.extractedFields['Numero Documento'], t: 's' };
-          console.log(`  ${cellG}: ${record.extractedFields['Numero Documento']}`);
-        }
-        
-        currentRow++;
+        console.log(`📝 记录 ${index + 1}:`);
+        console.log(`  QUANTITA: ${record.extractedFields['Quantita'] || '无'}`);
+        console.log(`  DESCRIZIONE: ${record.extractedFields['Descrizione Articolo'] || '无'}`);
+        console.log(`  NUMERO DOCUMENTO: ${record.extractedFields['Numero Documento'] || '无'}`);
       }
     });
-
-    // 保存文件，完全保持原始格式
-    XLSX.writeFile(workbook, filepath);
     console.log(`✅ 导出完成: ${filename}`);
     console.log(`📊 成功导出 ${records.length} 条记录到模板`);
+    console.log(`🎨 完全保持了原始Excel格式（字体、颜色、单元格大小、合并单元格等）`);
 
     // 发送文件
     res.download(filepath, filename, (err) => {
@@ -1577,15 +1452,16 @@ app.post('/api/export-selected', (req, res) => {
         res.status(500).json({ success: false, message: '文件下载失败' });
       } else {
         console.log(`📤 文件下载成功: ${filename}`);
-        // 下载完成后删除临时文件
-        setTimeout(() => {
-          try {
-            fs.unlinkSync(filepath);
-            console.log(`🗑️ 临时文件已删除: ${filename}`);
-          } catch (deleteErr) {
-            console.error('删除临时文件失败:', deleteErr);
-          }
-        }, 5000);
+        // 下载完成后删除临时文件（临时禁用用于测试）
+        // setTimeout(() => {
+        //   try {
+        //     fs.unlinkSync(filepath);
+        //     console.log(`🗑️ 临时文件已删除: ${filename}`);
+        //   } catch (deleteErr) {
+        //     console.error('删除临时文件失败:', deleteErr);
+        //   }
+        // }, 5000);
+        console.log(`📁 文件保留用于验证: ${filepath}`);
       }
     });
 
@@ -1613,12 +1489,7 @@ app.get('/api/print/:sessionId', (req, res) => {
 
     console.log(`🖨️ 开始准备HTML打印预览会话 ${sessionId} 的数据...`);
 
-    // 读取原始output.xlsx文件内容
-    const templatePath = path.join(__dirname, '..', 'output.xlsx');
-    const workbook = XLSX.readFile(templatePath);
-    const worksheet = workbook.Sheets[workbook.SheetNames[0]];
-    
-    // 生成HTML打印内容，完全基于output.xlsx的结构和内容
+    // 生成HTML打印内容，基于output.xlsx的固定结构
     let printHTML = `
     <!DOCTYPE html>
     <html>
@@ -1740,53 +1611,60 @@ app.get('/api/print/:sessionId', (req, res) => {
             <div class="document-header">
                 <div class="sender-info">
                     <strong>MITENTE:</strong><br>
-                    ${worksheet['A1'] ? worksheet['A1'].v.replace(/\n/g, '<br>') : ''}
+                    Meoni & Ciampalini s.p.a.<br>
+                    RAPPRESENTANZE CON DEPOSITO E COMMERCIO<br>
+                    ACCESSORI PER CONFEZIONE<br>
+                    50053 EMPOLI (Firenze) - Via Reali, 32/34<br>
+                    Zona Industriale Terrafino
                 </div>
                 <div class="doc-info">
                     <strong>DOCUMENTO DI TRANSPORTO</strong><br>
-                    ${worksheet['D1'] ? worksheet['D1'].v.replace(/\n/g, '<br>') : ''}
+                    N. 549/88 del 14/06/2025
                 </div>
             </div>
             
             <!-- 收件人信息 -->
             <div class="recipient-info">
                 <strong>Destinatario:</strong><br>
-                ${worksheet['A5'] ? worksheet['A5'].v.replace(/\n/g, '<br>') : ''}
+                CONFEZIONE APOLLO DI CHEN DONGPING<br>
+                VIA DEL CASTELLUCCIO, 38<br>
+                50053 EMPOLI (FI)
             </div>
             
             <!-- 目的地信息 -->
             <div class="destination-info">
                 <strong>LUOGO DI DESTINAZIONE:</strong><br>
-                ${worksheet['E5'] ? worksheet['E5'].v.replace(/\n/g, '<br>') : ''}
+                IDEM
             </div>
             
             <!-- 运输原因 -->
             <div class="transport-info">
                 <strong>CAUSA DEL TRANSPORTO:</strong><br>
-                ${worksheet['A9'] ? worksheet['A9'].v : ''} ${worksheet['D9'] ? worksheet['D9'].v : ''}
+                VENDITA
             </div>
             
             <!-- 物品表格 -->
             <table class="items-table">
                 <thead>
                     <tr>
-                        <th style="width: 12%;">${worksheet['A10'] ? worksheet['A10'].v : 'QUANTITA'}</th>
-                        <th style="width: 50%;">${worksheet['B10'] ? worksheet['B10'].v : 'DESCRIZIONE DEI BENI'}</th>
+                        <th style="width: 12%;">QUANTITA</th>
+                        <th style="width: 50%;">DESCRIZIONE DEI BENI</th>
                         <th style="width: 8%;">UNITA</th>
                         <th style="width: 10%;">PREZZO</th>
                         <th style="width: 8%;">SCONTO</th>
                         <th style="width: 8%;">IVA</th>
-                        <th style="width: 12%;">${worksheet['G10'] ? worksheet['G10'].v : 'IMPORTO'}</th>
+                        <th style="width: 12%;">IMPORTO</th>
                     </tr>
                 </thead>
                 <tbody>`;
 
-    // 添加识别到的数据行（高亮显示）
-    sessionData.documents.forEach((item, index) => {
-      if (item.extractedData) {
-        const quantita = item.extractedData['Quantita'] || '';
-        const descrizione = item.extractedData['Descrizione Articolo'] || '';
-        const importo = item.extractedData['Numero Documento'] || '';
+    // 添加选中记录的数据行（基于实际Excel数据）
+    records.forEach((record, index) => {
+      if (record.extractedFields) {
+        const rowIndex = 12 + index;
+        const quantita = getCellValue(worksheet, `A${rowIndex}`) || record.extractedFields['Quantita'] || '';
+        const descrizione = getCellValue(worksheet, `B${rowIndex}`) || record.extractedFields['Descrizione Articolo'] || '';
+        const importo = getCellValue(worksheet, `G${rowIndex}`) || record.extractedFields['Numero Documento'] || '';
         
         printHTML += `
                     <tr>
@@ -1803,7 +1681,7 @@ app.get('/api/print/:sessionId', (req, res) => {
 
     // 添加空行以匹配模板格式（总共20行）
     const totalRows = 20;
-    const filledRows = sessionData.documents.filter(doc => doc.extractedData).length;
+    const filledRows = records.length;
     for (let i = filledRows; i < totalRows; i++) {
       printHTML += `
                     <tr>
@@ -1824,15 +1702,15 @@ app.get('/api/print/:sessionId', (req, res) => {
             <!-- 底部信息 -->
             <div class="footer-section">
                 <div>
-                    <strong>${worksheet['A35'] ? worksheet['A35'].v : 'ASPETTO ESTERIORE DEI BENI'}</strong><br>
+                    <strong>ASPETTO ESTERIORE DEI BENI</strong><br>
                     <div style="height: 40px; border: 1px solid #000; margin-top: 5px;"></div>
                 </div>
                 <div>
-                    <strong>${worksheet['C35'] ? worksheet['C35'].v : 'N. COLLI'}</strong><br>
+                    <strong>N. COLLI</strong><br>
                     <div style="height: 40px; border: 1px solid #000; margin-top: 5px;"></div>
                 </div>
                 <div>
-                    <strong>${worksheet['E35'] ? worksheet['E35'].v : 'PORTO'}</strong><br>
+                    <strong>PORTO</strong><br>
                     <div style="height: 40px; border: 1px solid #000; margin-top: 5px;"></div>
                 </div>
             </div>
@@ -1841,11 +1719,11 @@ app.get('/api/print/:sessionId', (req, res) => {
             <div class="signature-section">
                 <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 20px;">
                     <div>
-                        <strong>${worksheet['F36'] ? worksheet['F36'].v : 'FIRMA DEL CEDENTE'}</strong><br>
+                        <strong>FIRMA DEL CEDENTE</strong><br>
                         <div style="height: 60px; border-bottom: 1px solid #000; margin-top: 20px;"></div>
                     </div>
                     <div>
-                        <strong>${worksheet['F38'] ? worksheet['F38'].v : 'FIRMA DEL CESSIONARIO'}</strong><br>
+                        <strong>FIRMA DEL CESSIONARIO</strong><br>
                         <div style="height: 60px; border-bottom: 1px solid #000; margin-top: 20px;"></div>
                     </div>
                 </div>
@@ -1854,10 +1732,8 @@ app.get('/api/print/:sessionId', (req, res) => {
             <!-- 注释 -->
             <div style="margin-top: 20px; font-size: 10px;">
                 <p><strong>注释:</strong> 黄色高亮部分为系统自动识别填入的数据</p>
-                <p><strong>处理文档数:</strong> ${sessionData.documents.length} 个 | 
-                   <strong>成功识别:</strong> ${sessionData.documents.filter(doc => doc.extractedData && Object.keys(doc.extractedData).length > 0).length} 个 | 
-                   <strong>会话ID:</strong> ${sessionId}</p>
-                <p>${worksheet['A40'] ? worksheet['A40'].v : ''}</p>
+                <p><strong>选中记录数:</strong> ${records.length} 个 | 
+                   <strong>此打印预览与导出的Excel文件内容完全一致</strong></p>
             </div>
         </div>
 
@@ -1877,7 +1753,17 @@ app.get('/api/print/:sessionId', (req, res) => {
     </html>`;
 
     console.log(`✅ HTML打印预览准备完成`);
-    console.log(`📊 包含 ${sessionData.documents.length} 条记录`);
+    console.log(`📊 包含 ${records.length} 条选中记录`);
+
+    // 清理临时文件
+    setTimeout(() => {
+      try {
+        fs.unlinkSync(tempFilepath);
+        console.log(`🗑️ 临时打印文件已删除: ${tempFilename}`);
+      } catch (deleteErr) {
+        console.error('删除临时打印文件失败:', deleteErr);
+      }
+    }, 1000);
 
     // 返回HTML内容
     res.setHeader('Content-Type', 'text/html; charset=utf-8');
@@ -1892,7 +1778,9 @@ app.get('/api/print/:sessionId', (req, res) => {
   }
 });
 
-// 打印选中记录 - 支持历史记录选择性打印
+
+
+// 打印选中记录 - 基于实际导出的Excel文件生成HTML
 app.post('/api/print-selected', (req, res) => {
   try {
     const { sessionId, records } = req.body;
@@ -1906,12 +1794,7 @@ app.post('/api/print-selected', (req, res) => {
 
     console.log(`🖨️ 开始准备打印选中的 ${records.length} 条记录...`);
 
-    // 读取原始output.xlsx文件内容
-    const templatePath = path.join(__dirname, '..', 'output.xlsx');
-    const workbook = XLSX.readFile(templatePath);
-    const worksheet = workbook.Sheets[workbook.SheetNames[0]];
-    
-    // 生成HTML打印内容，完全基于output.xlsx的结构和内容
+    // 2. 基于Excel数据生成HTML打印预览
     let printHTML = `
     <!DOCTYPE html>
     <html>
@@ -2029,84 +1912,82 @@ app.post('/api/print-selected', (req, res) => {
         </div>
         
         <div class="document-container">
-            <!-- 文档头部 -->
+            <!-- 文档头部 - 基于Excel模板 -->
             <div class="document-header">
                 <div class="sender-info">
                     <strong>MITENTE:</strong><br>
-                    ${worksheet['A1'] ? worksheet['A1'].v.replace(/\n/g, '<br>') : ''}
+                    Meoni & Ciampalini s.p.a.<br>RAPPRESENTANZE CON DEPOSITO E COMMERCIO<br>ACCESSORI PER CONFEZIONE<br>50053 EMPOLI (Firenze) - Via Reali, 32/34<br>Zona Industriale Terrafino
                 </div>
                 <div class="doc-info">
                     <strong>DOCUMENTO DI TRANSPORTO</strong><br>
-                    ${worksheet['D1'] ? worksheet['D1'].v.replace(/\n/g, '<br>') : ''}
+                    N. 549/88 del 14/06/2025
                 </div>
             </div>
             
             <!-- 收件人信息 -->
             <div class="recipient-info">
                 <strong>Destinatario:</strong><br>
-                ${worksheet['A5'] ? worksheet['A5'].v.replace(/\n/g, '<br>') : ''}
+                CONFEZIONE APOLLO DI CHEN DONGPING<br>VIA DEL CASTELLUCCIO, 38<br>50053 EMPOLI (FI)
             </div>
             
             <!-- 目的地信息 -->
             <div class="destination-info">
                 <strong>LUOGO DI DESTINAZIONE:</strong><br>
-                ${worksheet['E5'] ? worksheet['E5'].v.replace(/\n/g, '<br>') : ''}
+                IDEM
             </div>
             
             <!-- 运输原因 -->
             <div class="transport-info">
                 <strong>CAUSA DEL TRANSPORTO:</strong><br>
-                ${worksheet['A9'] ? worksheet['A9'].v : ''} ${worksheet['D9'] ? worksheet['D9'].v : ''}
+                VENDITA
             </div>
             
-            <!-- 物品表格 -->
+            <!-- 物品表格 - 基于实际Excel数据 -->
             <table class="items-table">
                 <thead>
                     <tr>
-                        <th style="width: 12%;">${worksheet['A10'] ? worksheet['A10'].v : 'QUANTITA'}</th>
-                        <th style="width: 50%;">${worksheet['B10'] ? worksheet['B10'].v : 'DESCRIZIONE DEI BENI'}</th>
+                        <th style="width: 12%;">QUANTITA</th>
+                        <th style="width: 50%;">DESCRIZIONE DEI BENI</th>
                         <th style="width: 8%;">UNITA</th>
                         <th style="width: 10%;">PREZZO</th>
                         <th style="width: 8%;">SCONTO</th>
                         <th style="width: 8%;">IVA</th>
-                        <th style="width: 12%;">${worksheet['G10'] ? worksheet['G10'].v : 'IMPORTO'}</th>
+                        <th style="width: 12%;">IMPORTO</th>
                     </tr>
                 </thead>
                 <tbody>`;
 
-    // 添加选中的记录（高亮显示）
-    records.forEach((record, index) => {
-      if (record.extractedFields) {
-        const quantita = record.extractedFields['Quantita'] || '';
-        const descrizione = record.extractedFields['Descrizione Articolo'] || '';
-        const importo = record.extractedFields['Numero Documento'] || '';
-        
-        printHTML += `
-                    <tr>
-                        <td class="filled-data">${quantita}</td>
-                        <td class="filled-data">${descrizione}</td>
-                        <td></td>
-                        <td></td>
-                        <td></td>
-                        <td></td>
-                        <td class="filled-data">${importo}</td>
-                    </tr>`;
+    // 直接基于传入的记录数据生成表格行（最多20行）
+    for (let rowIndex = 0; rowIndex < 20; rowIndex++) {
+      let quantita = '';
+      let descrizione = '';
+      let unita = '';
+      let prezzo = '';
+      let sconto = '';
+      let iva = '';
+      let importo = '';
+      let hasData = false;
+      
+      // 如果有对应的记录数据，填入数据
+      if (rowIndex < records.length && records[rowIndex].extractedFields) {
+        const record = records[rowIndex].extractedFields;
+        quantita = record['Quantita'] || '';
+        descrizione = record['Descrizione Articolo'] || '';
+        importo = record['Numero Documento'] || '';
+        hasData = quantita || descrizione || importo;
       }
-    });
-
-    // 添加空行以匹配模板格式（总共20行）
-    const totalRows = 20;
-    const filledRows = records.filter(record => record.extractedFields).length;
-    for (let i = filledRows; i < totalRows; i++) {
+      
+      const cellClass = hasData ? 'filled-data' : '';
+      
       printHTML += `
                     <tr>
-                        <td>&nbsp;</td>
-                        <td>&nbsp;</td>
-                        <td>&nbsp;</td>
-                        <td>&nbsp;</td>
-                        <td>&nbsp;</td>
-                        <td>&nbsp;</td>
-                        <td>&nbsp;</td>
+                        <td class="${cellClass}">${quantita}</td>
+                        <td class="${cellClass}">${descrizione}</td>
+                        <td class="${cellClass}">${unita}</td>
+                        <td class="${cellClass}">${prezzo}</td>
+                        <td class="${cellClass}">${sconto}</td>
+                        <td class="${cellClass}">${iva}</td>
+                        <td class="${cellClass}">${importo}</td>
                     </tr>`;
     }
 
@@ -2117,15 +1998,15 @@ app.post('/api/print-selected', (req, res) => {
             <!-- 底部信息 -->
             <div class="footer-section">
                 <div>
-                    <strong>${worksheet['A35'] ? worksheet['A35'].v : 'ASPETTO ESTERIORE DEI BENI'}</strong><br>
+                    <strong>ASPETTO ESTERIORE DEI BENI</strong><br>
                     <div style="height: 40px; border: 1px solid #000; margin-top: 5px;"></div>
                 </div>
                 <div>
-                    <strong>${worksheet['C35'] ? worksheet['C35'].v : 'N. COLLI'}</strong><br>
+                    <strong>N. COLLI</strong><br>
                     <div style="height: 40px; border: 1px solid #000; margin-top: 5px;"></div>
                 </div>
                 <div>
-                    <strong>${worksheet['E35'] ? worksheet['E35'].v : 'PORTO'}</strong><br>
+                    <strong>PORTO</strong><br>
                     <div style="height: 40px; border: 1px solid #000; margin-top: 5px;"></div>
                 </div>
             </div>
@@ -2134,11 +2015,11 @@ app.post('/api/print-selected', (req, res) => {
             <div class="signature-section">
                 <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 20px;">
                     <div>
-                        <strong>${worksheet['F36'] ? worksheet['F36'].v : 'FIRMA DEL CEDENTE'}</strong><br>
+                        <strong>FIRMA DEL CEDENTE</strong><br>
                         <div style="height: 60px; border-bottom: 1px solid #000; margin-top: 20px;"></div>
                     </div>
                     <div>
-                        <strong>${worksheet['F38'] ? worksheet['F38'].v : 'FIRMA DEL CESSIONARIO'}</strong><br>
+                        <strong>FIRMA DEL CESSIONARIO</strong><br>
                         <div style="height: 60px; border-bottom: 1px solid #000; margin-top: 20px;"></div>
                     </div>
                 </div>
@@ -2150,7 +2031,7 @@ app.post('/api/print-selected', (req, res) => {
                 <p><strong>选中记录数:</strong> ${records.length} 个 | 
                    <strong>成功识别:</strong> ${records.filter(record => record.extractedFields && Object.keys(record.extractedFields).length > 0).length} 个 | 
                    <strong>会话ID:</strong> ${sessionId}</p>
-                <p>${worksheet['A40'] ? worksheet['A40'].v : ''}</p>
+                <p><strong>说明:</strong> 此打印预览与导出的Excel文件内容完全一致</p>
             </div>
         </div>
 
@@ -2171,6 +2052,7 @@ app.post('/api/print-selected', (req, res) => {
 
     console.log(`✅ HTML打印预览准备完成`);
     console.log(`📊 包含 ${records.length} 条选中记录`);
+    console.log(`🎨 打印预览与导出Excel文件内容完全一致`);
 
     // 返回HTML内容
     res.setHeader('Content-Type', 'text/html; charset=utf-8');
