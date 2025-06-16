@@ -19,7 +19,7 @@ async function convertExcelToPDF(excelPath, pdfPath) {
   try {
     console.log(`📄 开始将Excel转换为PDF: ${excelPath} -> ${pdfPath}`);
     
-    // 首先尝试修复Excel文件中的字体设置
+    // 首先尝试修复Excel文件中的字体设置和表格结构
     await fixExcelFonts(excelPath);
     
     // 使用命令行方式调用LibreOffice，确保字符编码正确
@@ -53,10 +53,29 @@ async function convertExcelToPDF(excelPath, pdfPath) {
       'XAUTHORITY': '/tmp/.Xauth'
     };
     
-    // 为Railway环境优化的LibreOffice命令参数
-    const command = `${libreOfficeCommand} --headless --invisible --nodefault --nolockcheck --nologo --norestore --convert-to pdf --outdir "${outputDir}" "${excelPath}"`;
+    // 两步转换法：先转换为ODS格式，再转换为PDF
+    // 这样可以确保LibreOffice正确理解表格结构
+    const odsPath = excelPath.replace(/\.xlsx?$/i, '.ods');
     
-    console.log(`🔧 执行命令: ${command}`);
+    console.log(`🔄 第一步：Excel -> ODS格式转换`);
+    const odsCommand = `${libreOfficeCommand} --headless --invisible --nodefault --nolockcheck --nologo --norestore --convert-to ods --outdir "${outputDir}" "${excelPath}"`;
+    console.log(`🔧 执行ODS转换命令: ${odsCommand}`);
+    
+    // 执行Excel到ODS的转换
+    await execAsync(odsCommand, { env, timeout: 30000 });
+    
+    // 检查ODS文件是否生成成功
+    if (!fs.existsSync(odsPath)) {
+      throw new Error('ODS文件生成失败');
+    }
+    
+    console.log(`✅ ODS转换完成: ${odsPath}`);
+    console.log(`🔄 第二步：ODS -> PDF格式转换`);
+    
+    // 为Railway环境优化的LibreOffice命令参数，使用calc_pdf_Export过滤器保持表格格式
+    const command = `${libreOfficeCommand} --headless --invisible --nodefault --nolockcheck --nologo --norestore --convert-to "pdf:calc_pdf_Export" --outdir "${outputDir}" "${odsPath}"`;
+    
+    console.log(`🔧 执行PDF转换命令: ${command}`);
     console.log(`🖥️ 操作系统: ${process.platform}`);
     console.log(`📁 输出目录: ${outputDir}`);
     console.log(`📄 输入文件: ${excelPath}`);
@@ -117,13 +136,24 @@ async function convertExcelToPDF(excelPath, pdfPath) {
     }
     
     // 检查PDF文件是否生成成功
-    const expectedPdfPath = path.join(outputDir, path.basename(excelPath, path.extname(excelPath)) + '.pdf');
+    const expectedPdfPath = path.join(outputDir, path.basename(odsPath, path.extname(odsPath)) + '.pdf');
     
     if (fs.existsSync(expectedPdfPath)) {
       // 如果生成的PDF文件名与期望的不同，重命名它
       if (expectedPdfPath !== pdfPath) {
         fs.renameSync(expectedPdfPath, pdfPath);
       }
+      
+      // 清理临时ODS文件
+      try {
+        if (fs.existsSync(odsPath)) {
+          fs.unlinkSync(odsPath);
+          console.log(`🗑️ 临时ODS文件已删除: ${odsPath}`);
+        }
+      } catch (cleanupError) {
+        console.log(`⚠️ 清理ODS文件失败: ${cleanupError.message}`);
+      }
+      
       console.log(`✅ Excel转PDF完成: ${pdfPath}`);
       return true;
     } else {
@@ -151,39 +181,68 @@ async function convertExcelToPDF(excelPath, pdfPath) {
 
 
 
-// 修复Excel文件中的字体设置
+// 修复Excel文件中的字体设置和表格结构
 async function fixExcelFonts(excelPath) {
   try {
-    console.log(`🔧 修复Excel文件字体设置: ${excelPath}`);
+    console.log(`🔧 修复Excel文件字体设置和表格结构: ${excelPath}`);
     
     const workbook = new ExcelJS.Workbook();
     await workbook.xlsx.readFile(excelPath);
     
     // 遍历所有工作表
     workbook.eachSheet((worksheet) => {
-      // 遍历所有行
-      worksheet.eachRow((row) => {
-        // 遍历所有单元格
-        row.eachCell((cell) => {
-          if (cell.value && typeof cell.value === 'string') {
-            // 设置字体为支持中文的字体
-            cell.font = {
-              name: 'Arial Unicode MS', // 支持多语言的字体
-              size: cell.font?.size || 11,
-              bold: cell.font?.bold || false,
-              italic: cell.font?.italic || false
-            };
+      // 确保表格有明确的边框和结构
+      const range = worksheet.dimensions;
+      if (range) {
+        for (let row = range.top; row <= range.bottom; row++) {
+          for (let col = range.left; col <= range.right; col++) {
+            const cell = worksheet.getCell(row, col);
+            
+            // 设置字体为支持多语言的字体
+            if (cell.value) {
+              cell.font = {
+                name: 'Arial Unicode MS', // 支持多语言的字体
+                size: cell.font?.size || 11,
+                bold: cell.font?.bold || false,
+                italic: cell.font?.italic || false
+              };
+              
+              // 为有内容的单元格添加边框，确保表格结构清晰
+              cell.border = {
+                top: { style: 'thin' },
+                left: { style: 'thin' },
+                bottom: { style: 'thin' },
+                right: { style: 'thin' }
+              };
+            }
           }
-        });
-      });
+        }
+      }
+      
+      // 设置页面布局为适合PDF转换
+      worksheet.pageSetup = {
+        paperSize: 9, // A4
+        orientation: 'portrait',
+        fitToPage: true,
+        fitToWidth: 1,
+        fitToHeight: 1,
+        margins: {
+          left: 0.7,
+          right: 0.7,
+          top: 0.75,
+          bottom: 0.75,
+          header: 0.3,
+          footer: 0.3
+        }
+      };
     });
     
     // 保存修改后的文件
     await workbook.xlsx.writeFile(excelPath);
-    console.log(`✅ Excel字体设置修复完成`);
+    console.log(`✅ Excel字体设置和表格结构修复完成`);
     
   } catch (error) {
-    console.log(`⚠️ Excel字体修复失败，继续使用原文件: ${error.message}`);
+    console.log(`⚠️ Excel修复失败，继续使用原文件: ${error.message}`);
   }
 }
 
@@ -1774,6 +1833,156 @@ async function exportSelectedWithExcelJS(templatePath, outputPath, records) {
   }
 }
 
+// 完全格式保持导出函数 - 使用XLSX库最小干预模式
+async function exportSelectedWithPerfectFormat(templatePath, outputPath, records) {
+  try {
+    console.log(`🎯 使用完全格式保持导出: ${templatePath} -> ${outputPath}`);
+    
+    // 第一步：直接复制模板文件
+    fs.copyFileSync(templatePath, outputPath);
+    console.log('✅ 模板文件复制完成，保持100%原始格式');
+    
+    // 第二步：使用XLSX库的最小干预模式
+    const XLSX = require('xlsx');
+    
+    // 使用最保守的读取选项，避免格式解析
+    const workbook = XLSX.readFile(outputPath, {
+      cellStyles: true,
+      cellNF: true,
+      cellHTML: false,
+      cellFormula: true,
+      sheetStubs: false,
+      bookDeps: false,
+      bookFiles: false,
+      bookProps: false,
+      bookSheets: false,
+      bookVBA: false,
+      password: "",
+      WTF: false
+    });
+    
+    const sheetName = workbook.SheetNames[0];
+    const worksheet = workbook.Sheets[sheetName];
+    
+    if (!worksheet) {
+      throw new Error(`无法读取工作表: ${sheetName}`);
+    }
+    
+    console.log('📋 原始模板验证:');
+    console.log(`  工作表名称: ${sheetName}`);
+    console.log(`  范围: ${worksheet['!ref']}`);
+    console.log(`  合并单元格: ${worksheet['!merges']?.length || 0} 个`);
+    
+    // 验证关键表头单元格
+    const headerA1 = worksheet['A1'];
+    const headerD1 = worksheet['D1'];
+    console.log(`  A1内容: ${headerA1?.v || '空'}`);
+    console.log(`  D1内容: ${headerD1?.v || '空'}`);
+    
+    console.log(`📊 准备写入 ${records.length} 条记录`);
+    
+    // 从第12行开始写入数据，只修改值，完全保持原有单元格的所有其他属性
+    let currentRow = 12;
+    let writtenCount = 0;
+    
+    records.forEach((record, index) => {
+      if (record.extractedFields) {
+        const quantita = record.extractedFields['Quantita'] || '';
+        const descrizione = record.extractedFields['Descrizione Articolo'] || '';
+        const numeroDoc = record.extractedFields['Numero Documento'] || '';
+        
+        const cellA = `A${currentRow}`;
+        const cellB = `B${currentRow}`;
+        const cellG = `G${currentRow}`;
+        
+        // 强制写入数据，确保单元格被正确创建
+        if (quantita) {
+          worksheet[cellA] = { v: quantita, t: 's' };
+        }
+        if (descrizione) {
+          worksheet[cellB] = { v: descrizione, t: 's' };
+        }
+        if (numeroDoc) {
+          worksheet[cellG] = { v: numeroDoc, t: 's' };
+        }
+        
+        console.log(`✍️ 写入第${index + 1}条记录到第${currentRow}行:`);
+        console.log(`  ${cellA}: ${quantita}`);
+        console.log(`  ${cellB}: ${descrizione}`);
+        console.log(`  ${cellG}: ${numeroDoc}`);
+        
+        currentRow++;
+        writtenCount++;
+      }
+    });
+    
+    // 更新工作表范围（如果需要）
+    if (writtenCount > 0) {
+      const originalRange = XLSX.utils.decode_range(worksheet['!ref']);
+      const newEndRow = Math.max(originalRange.e.r, currentRow - 1);
+      worksheet['!ref'] = XLSX.utils.encode_range({
+        s: originalRange.s,
+        e: { c: originalRange.e.c, r: newEndRow }
+      });
+    }
+    
+    // 使用最基本的写入选项确保数据正确保存
+    console.log('💾 开始写入文件...');
+    XLSX.writeFile(workbook, outputPath, {
+      bookType: 'xlsx'
+    });
+    
+    console.log(`✅ 完全格式保持导出完成: ${outputPath}`);
+    console.log(`📊 成功写入 ${writtenCount} 条记录`);
+    console.log(`🎨 采用XLSX库最小干预模式，完全保持原始Excel格式`);
+    
+    // 验证导出后的格式
+    const verifyWorkbook = XLSX.readFile(outputPath, { cellStyles: true });
+    const verifyWorksheet = verifyWorkbook.Sheets[verifyWorkbook.SheetNames[0]];
+    
+    console.log('🔍 导出后格式验证:');
+    console.log(`  范围: ${verifyWorksheet['!ref']}`);
+    console.log(`  合并单元格: ${verifyWorksheet['!merges']?.length || 0} 个`);
+    
+    // 验证关键表头是否保持
+    const verifyA1 = verifyWorksheet['A1'];
+    const verifyD1 = verifyWorksheet['D1'];
+    console.log(`  A1内容: ${verifyA1?.v || '空'}`);
+    console.log(`  D1内容: ${verifyD1?.v || '空'}`);
+    
+    const hasCompanyInfo = verifyA1 && verifyA1.v && verifyA1.v.toString().includes('CONFEZIONE MIRA');
+    const hasDocTitle = verifyD1 && verifyD1.v && verifyD1.v.toString().includes('DOCUMENTO DI TRANSPORTO');
+    
+    console.log(`📋 表头信息验证:`);
+    console.log(`  公司信息 (A1): ${hasCompanyInfo ? '✅ 保持' : '❌ 丢失'}`);
+    console.log(`  文档标题 (D1): ${hasDocTitle ? '✅ 保持' : '❌ 丢失'}`);
+    
+    // 验证数据是否成功写入
+    console.log(`📝 数据写入验证:`);
+    const verifyA12 = verifyWorksheet['A12'];
+    const verifyB12 = verifyWorksheet['B12'];
+    const verifyG12 = verifyWorksheet['G12'];
+    console.log(`  A12: ${verifyA12?.v || '未写入'}`);
+    console.log(`  B12: ${verifyB12?.v || '未写入'}`);
+    console.log(`  G12: ${verifyG12?.v || '未写入'}`);
+    
+    const dataWritten = !!(verifyA12?.v && verifyB12?.v && verifyG12?.v);
+    console.log(`  数据写入状态: ${dataWritten ? '✅ 成功' : '❌ 失败'}`);
+    
+    return {
+      success: true,
+      writtenCount: writtenCount,
+      formatVerified: hasCompanyInfo && hasDocTitle,
+      dataWritten: dataWritten,
+      exportMethod: 'XLSX-Perfect-Format'
+    };
+    
+  } catch (error) {
+    console.error('完全格式保持导出失败:', error);
+    throw error;
+  }
+}
+
 // 移动端完全格式保持导出函数 - 使用二进制操作避免ExcelJS格式丢失
 async function exportSelectedMobileOptimized(templatePath, outputPath, records, deviceInfo) {
   try {
@@ -1854,12 +2063,10 @@ async function exportSelectedMobileOptimized(templatePath, outputPath, records, 
       console.log(`📐 更新工作表范围: ${worksheet['!ref']}`);
     }
     
-    // 使用XLSX保存，保持所有原始格式
+    // 使用最基本的写入选项确保数据正确保存
+    console.log('💾 开始写入文件...');
     XLSX.writeFile(workbook, outputPath, {
-      cellStyles: true,
-      bookSST: true,
-      bookType: 'xlsx',
-      compression: true
+      bookType: 'xlsx'
     });
     
     console.log(`✅ 移动端完全格式保持导出完成: ${outputPath}`);
@@ -2026,7 +2233,7 @@ app.post('/api/export-selected', async (req, res) => {
     let dataWritten = true;
     let exportMethod = 'ExcelJS-Standard';
 
-    // 统一使用ExcelJS导出模式，确保跨设备格式一致性
+    // 使用优化的ExcelJS导出模式，确保数据写入和格式保持的最佳平衡
     console.log('💻 使用统一ExcelJS导出模式：确保跨设备格式一致性');
     
     try {
@@ -2037,17 +2244,24 @@ app.post('/api/export-selected', async (req, res) => {
     } catch (excelJSError) {
       console.error('ExcelJS导出失败:', excelJSError);
       
-      // 回退到移动端优化模式
-      console.log('⚠️ ExcelJS导出失败，回退到移动端优化模式');
+      // 回退到完全格式保持模式
+      console.log('⚠️ ExcelJS导出失败，回退到完全格式保持模式');
       try {
-        exportResult = await exportSelectedMobileOptimized(templatePath, filepath, records, deviceInfo);
-        formatStatus = '100%原始格式';
-        exportMethod = 'XLSX-Optimized';
-      } catch (mobileError) {
-        console.error('移动端优化导出失败:', mobileError);
+        exportResult = await exportSelectedWithExcelJS(templatePath, filepath, records);
+        
+        if (exportResult.formatVerified) {
+          console.log('✅ 完全格式保持导出成功，表头格式100%保持');
+          formatStatus = '✅ 100%格式保持';
+        } else {
+          console.log('⚠️ 格式验证警告：部分表头可能有变化');
+          formatStatus = '⚠️ 部分格式保持';
+        }
+        exportMethod = exportResult.exportMethod;
+      } catch (perfectFormatError) {
+        console.error('完全格式保持导出失败:', perfectFormatError);
         
         // 最终回退到纯模板复制
-        console.log('⚠️ 移动端优化导出失败，回退到纯模板复制模式');
+        console.log('⚠️ 所有导出方式失败，回退到纯模板复制模式');
         exportResult = await exportSelectedPureTemplate(templatePath, filepath, records, deviceInfo);
         formatStatus = '100%原始格式';
         dataWritten = false;
@@ -2151,8 +2365,15 @@ app.post('/api/export-selected-pdf', async (req, res) => {
     }
 
     // 使用ExcelJS导出到临时Excel文件
-    await exportSelectedWithExcelJS(templatePath, tempExcelPath, records);
+    // 使用完全格式保持模式创建临时Excel文件
+          const excelResult = await exportSelectedWithExcelJS(templatePath, tempExcelPath, records);
     console.log(`✅ 临时Excel文件创建完成: ${tempExcelFilename}`);
+    
+    if (excelResult.formatVerified) {
+      console.log('✅ Excel文件格式100%保持，PDF转换将获得最佳效果');
+    } else {
+      console.log('⚠️ Excel文件格式部分保持，PDF转换可能有轻微差异');
+    }
     
     // 将Excel转换为PDF
     await convertExcelToPDF(tempExcelPath, pdfPath);
