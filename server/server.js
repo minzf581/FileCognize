@@ -1666,7 +1666,20 @@ async function exportSessionWithExcelJS(templatePath, outputPath, sessionData) {
         
         // 直接设置值，不创建新的样式对象
         cellA.value = quantita;
-        cellB.value = descrizione;
+        
+        // 处理Descrizione列的DDT对齐
+        if (descrizione && descrizione.endsWith(' DDT')) {
+          // 分离主要内容和DDT
+          const mainContent = descrizione.substring(0, descrizione.length - 4); // 去掉 " DDT"
+          
+          // 使用空格填充来实现DDT右对齐效果
+          // 根据单元格宽度估算需要的空格数（B列通常比较宽）
+          const paddingSpaces = ' '.repeat(Math.max(0, 50 - mainContent.length));
+          cellB.value = mainContent + paddingSpaces + 'DDT';
+        } else {
+          cellB.value = descrizione;
+        }
+        
         cellG.value = numeroDoc;
         
         console.log(`✍️ 写入第${index + 1}条记录到第${currentRow}行:`);
@@ -1790,7 +1803,20 @@ async function exportSelectedWithExcelJS(templatePath, outputPath, records) {
         
         // 直接设置值，不创建新的样式对象
         cellA.value = quantita;
-        cellB.value = descrizione;
+        
+        // 处理Descrizione列的DDT对齐
+        if (descrizione && descrizione.endsWith(' DDT')) {
+          // 分离主要内容和DDT
+          const mainContent = descrizione.substring(0, descrizione.length - 4); // 去掉 " DDT"
+          
+          // 使用空格填充来实现DDT右对齐效果
+          // 根据单元格宽度估算需要的空格数（B列通常比较宽）
+          const paddingSpaces = ' '.repeat(Math.max(0, 50 - mainContent.length));
+          cellB.value = mainContent + paddingSpaces + 'DDT';
+        } else {
+          cellB.value = descrizione;
+        }
+        
         cellG.value = numeroDoc;
         
         console.log(`✍️ 写入第${index + 1}条记录到第${currentRow}行:`);
@@ -2915,6 +2941,129 @@ app.use((error, req, res, next) => {
   
   console.error('服务器错误:', error);
   res.status(500).json({ error: '服务器内部错误' });
+});
+
+// 历史记录管理API
+const historyFilePath = path.join(__dirname, 'history.json');
+
+// 加载历史记录
+function loadHistoryFromFile() {
+  try {
+    if (fs.existsSync(historyFilePath)) {
+      const data = fs.readFileSync(historyFilePath, 'utf8');
+      return JSON.parse(data);
+    }
+  } catch (error) {
+    console.error('加载历史记录失败:', error);
+  }
+  return [];
+}
+
+// 保存历史记录
+function saveHistoryToFile(history) {
+  try {
+    fs.writeFileSync(historyFilePath, JSON.stringify(history, null, 2), 'utf8');
+    return true;
+  } catch (error) {
+    console.error('保存历史记录失败:', error);
+    return false;
+  }
+}
+
+// 保存单条历史记录
+app.post('/api/save-history', (req, res) => {
+  try {
+    const historyItem = req.body;
+    
+    // 验证必要字段
+    if (!historyItem.id || !historyItem.timestamp || !historyItem.extractedFields) {
+      return res.status(400).json({ error: '历史记录数据不完整' });
+    }
+    
+    // 加载现有历史记录
+    const history = loadHistoryFromFile();
+    
+    // 检查是否已存在相同ID的记录
+    const existingIndex = history.findIndex(item => item.id === historyItem.id);
+    
+    if (existingIndex >= 0) {
+      // 更新现有记录
+      history[existingIndex] = historyItem;
+      console.log(`📝 更新历史记录: ${historyItem.id}`);
+    } else {
+      // 添加新记录
+      history.push(historyItem);
+      console.log(`📝 保存新历史记录: ${historyItem.id}`);
+    }
+    
+    // 保存到文件
+    if (saveHistoryToFile(history)) {
+      res.json({ success: true, message: '历史记录保存成功' });
+    } else {
+      res.status(500).json({ error: '历史记录保存失败' });
+    }
+    
+  } catch (error) {
+    console.error('保存历史记录错误:', error);
+    res.status(500).json({ error: '保存历史记录失败' });
+  }
+});
+
+// 加载所有历史记录
+app.get('/api/load-history', (req, res) => {
+  try {
+    const history = loadHistoryFromFile();
+    console.log(`📋 加载历史记录: ${history.length} 条`);
+    res.json(history);
+  } catch (error) {
+    console.error('加载历史记录错误:', error);
+    res.status(500).json({ error: '加载历史记录失败' });
+  }
+});
+
+// 删除单条历史记录
+app.delete('/api/delete-history/:id', (req, res) => {
+  try {
+    const recordId = req.params.id;
+    
+    // 加载现有历史记录
+    const history = loadHistoryFromFile();
+    
+    // 查找要删除的记录
+    const initialLength = history.length;
+    const filteredHistory = history.filter(item => item.id !== recordId);
+    
+    if (filteredHistory.length === initialLength) {
+      return res.status(404).json({ error: '记录不存在' });
+    }
+    
+    // 保存更新后的历史记录
+    if (saveHistoryToFile(filteredHistory)) {
+      console.log(`🗑️ 删除历史记录: ${recordId}`);
+      res.json({ success: true, message: '历史记录删除成功' });
+    } else {
+      res.status(500).json({ error: '历史记录删除失败' });
+    }
+    
+  } catch (error) {
+    console.error('删除历史记录错误:', error);
+    res.status(500).json({ error: '删除历史记录失败' });
+  }
+});
+
+// 清空所有历史记录
+app.delete('/api/clear-history', (req, res) => {
+  try {
+    if (saveHistoryToFile([])) {
+      console.log('🗑️ 清空所有历史记录');
+      res.json({ success: true, message: '所有历史记录已清空' });
+    } else {
+      res.status(500).json({ error: '清空历史记录失败' });
+    }
+  } catch (error) {
+    console.error('清空历史记录错误:', error);
+    res.status(500).json({ error: '清空历史记录失败' });
+  }
 });
 
 // 404处理

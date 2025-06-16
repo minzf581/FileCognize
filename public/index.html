@@ -165,6 +165,68 @@
             font-weight: bold;
         }
 
+        /* 进度条模态框样式 */
+        .progress-modal {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.5);
+            display: none;
+            justify-content: center;
+            align-items: center;
+            z-index: 9999;
+        }
+
+        .progress-modal-content {
+            background: white;
+            padding: 30px;
+            border-radius: 15px;
+            box-shadow: 0 20px 40px rgba(0,0,0,0.3);
+            min-width: 400px;
+            max-width: 500px;
+            text-align: center;
+        }
+
+        .progress-modal h3 {
+            margin-bottom: 20px;
+            color: #333;
+            font-size: 1.5em;
+        }
+
+        .progress-modal .progress {
+            display: block;
+            height: 25px;
+            margin: 20px 0;
+        }
+
+        .progress-modal .progress-bar {
+            font-size: 14px;
+            font-weight: bold;
+        }
+
+        .progress-status {
+            color: #666;
+            font-size: 14px;
+            margin-top: 10px;
+        }
+
+        .spinner {
+            border: 3px solid #f3f3f3;
+            border-top: 3px solid #4facfe;
+            border-radius: 50%;
+            width: 30px;
+            height: 30px;
+            animation: spin 1s linear infinite;
+            margin: 0 auto 15px;
+        }
+
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+
         .results-container {
             background: #f8f9fa;
             border-radius: 10px;
@@ -648,10 +710,7 @@
                 <!-- 批量操作按钮 -->
                 <div class="batch-actions">
                     <button id="exportSelectedPdfBtn" class="btn btn-primary" onclick="exportSelectedPDF()" disabled>
-                        <i class="fas fa-file-pdf"></i> 导出PDF (推荐)
-                    </button>
-                    <button id="exportSelectedBtn" class="btn btn-outline-primary" onclick="exportSelected()" disabled>
-                        <i class="fas fa-download"></i> 导出Excel
+                        <i class="fas fa-download"></i> 导出文件
                     </button>
                     <button id="printSelectedBtn" class="btn btn-secondary" onclick="printSelected()" disabled>
                         <i class="fas fa-print"></i> 打印选中记录
@@ -887,18 +946,176 @@
             if (!currentData) return;
 
             // 检查是否已存在相同记录
-            const isDuplicate = historyData.some(item => 
+            const duplicateRecord = historyData.find(item => 
                 item.extractedFields['Numero Documento'] === currentData.extractedFields['Numero Documento'] &&
                 item.extractedFields['Quantita'] === currentData.extractedFields['Quantita'] &&
                 item.extractedFields['Descrizione Articolo'] === currentData.extractedFields['Descrizione Articolo']
             );
 
-            if (isDuplicate) {
-                showMessage('该记录已存在于历史记录中！', 'warning');
+            if (duplicateRecord) {
+                // 显示重复记录确认对话框
+                showDuplicateConfirmDialog(duplicateRecord);
                 return;
             }
 
             // 添加到历史记录
+            addRecordToHistory();
+        }
+
+        // 显示重复记录确认对话框
+        function showDuplicateConfirmDialog(duplicateRecord) {
+            const modal = document.createElement('div');
+            modal.className = 'duplicate-modal';
+            modal.innerHTML = `
+                <div class="duplicate-modal-content">
+                    <div class="duplicate-modal-header">
+                        <h3><i class="fas fa-exclamation-triangle text-warning"></i> 发现重复记录</h3>
+                    </div>
+                    <div class="duplicate-modal-body">
+                        <p><strong>检测到相似的记录已存在：</strong></p>
+                        <div class="duplicate-record-info">
+                            <div class="record-item">
+                                <strong>现有记录：</strong>
+                                <ul>
+                                    <li><strong>添加时间：</strong> ${formatDateTime(duplicateRecord.timestamp)}</li>
+                                    <li><strong>文档编号：</strong> ${duplicateRecord.extractedFields['Numero Documento'] || '-'}</li>
+                                    <li><strong>数量：</strong> ${duplicateRecord.extractedFields['Quantita'] || '-'}</li>
+                                    <li><strong>描述：</strong> ${duplicateRecord.extractedFields['Descrizione Articolo'] || '-'}</li>
+                                </ul>
+                            </div>
+                            <div class="record-item">
+                                <strong>新记录：</strong>
+                                <ul>
+                                    <li><strong>文件名：</strong> ${currentData.filename || '未知文件'}</li>
+                                    <li><strong>文档编号：</strong> ${currentData.extractedFields['Numero Documento'] || '-'}</li>
+                                    <li><strong>数量：</strong> ${currentData.extractedFields['Quantita'] || '-'}</li>
+                                    <li><strong>描述：</strong> ${currentData.extractedFields['Descrizione Articolo'] || '-'}</li>
+                                </ul>
+                            </div>
+                        </div>
+                        <p class="duplicate-question"><strong>是否仍要添加这条新记录？</strong></p>
+                    </div>
+                    <div class="duplicate-modal-footer">
+                        <button class="btn btn-secondary" onclick="closeDuplicateModal()">
+                            <i class="fas fa-times"></i> 取消
+                        </button>
+                        <button class="btn btn-primary" onclick="confirmAddDuplicate()">
+                            <i class="fas fa-plus"></i> 仍要添加
+                        </button>
+                    </div>
+                </div>
+            `;
+
+            document.body.appendChild(modal);
+            
+            // 添加样式
+            if (!document.getElementById('duplicateModalStyles')) {
+                const style = document.createElement('style');
+                style.id = 'duplicateModalStyles';
+                style.textContent = `
+                    .duplicate-modal {
+                        position: fixed;
+                        top: 0;
+                        left: 0;
+                        width: 100%;
+                        height: 100%;
+                        background-color: rgba(0, 0, 0, 0.5);
+                        display: flex;
+                        justify-content: center;
+                        align-items: center;
+                        z-index: 1000;
+                    }
+                    
+                    .duplicate-modal-content {
+                        background: white;
+                        border-radius: 8px;
+                        max-width: 600px;
+                        width: 90%;
+                        max-height: 80vh;
+                        overflow-y: auto;
+                        box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3);
+                    }
+                    
+                    .duplicate-modal-header {
+                        padding: 20px 20px 10px;
+                        border-bottom: 1px solid #dee2e6;
+                    }
+                    
+                    .duplicate-modal-header h3 {
+                        margin: 0;
+                        color: #495057;
+                    }
+                    
+                    .duplicate-modal-body {
+                        padding: 20px;
+                    }
+                    
+                    .duplicate-record-info {
+                        background: #f8f9fa;
+                        border-radius: 6px;
+                        padding: 15px;
+                        margin: 15px 0;
+                    }
+                    
+                    .record-item {
+                        margin-bottom: 15px;
+                    }
+                    
+                    .record-item:last-child {
+                        margin-bottom: 0;
+                    }
+                    
+                    .record-item ul {
+                        margin: 8px 0 0 20px;
+                        padding: 0;
+                    }
+                    
+                    .record-item li {
+                        margin: 5px 0;
+                        color: #6c757d;
+                    }
+                    
+                    .duplicate-question {
+                        margin-top: 20px;
+                        color: #495057;
+                        font-size: 16px;
+                    }
+                    
+                    .duplicate-modal-footer {
+                        padding: 15px 20px 20px;
+                        text-align: right;
+                        border-top: 1px solid #dee2e6;
+                    }
+                    
+                    .duplicate-modal-footer .btn {
+                        margin-left: 10px;
+                    }
+                    
+                    .text-warning {
+                        color: #ffc107 !important;
+                    }
+                `;
+                document.head.appendChild(style);
+            }
+        }
+
+        // 关闭重复记录对话框
+        function closeDuplicateModal() {
+            const modal = document.querySelector('.duplicate-modal');
+            if (modal) {
+                document.body.removeChild(modal);
+            }
+        }
+
+        // 确认添加重复记录
+        function confirmAddDuplicate() {
+            closeDuplicateModal();
+            addRecordToHistory();
+            showMessage('记录已添加到历史记录！（包含重复记录）', 'success');
+        }
+
+        // 实际添加记录到历史的函数
+        async function addRecordToHistory() {
             const historyItem = {
                 id: generateId(),
                 timestamp: new Date().toISOString(),
@@ -907,13 +1124,23 @@
             };
 
             historyData.push(historyItem);
-            saveHistoryData();
+            saveHistoryData(); // 保存到本地存储
+            
+            // 同时保存到服务器
+            const serverSaved = await saveHistoryToServer(historyItem);
+            
             renderHistoryTable();
             
             // 显示历史记录区域
             historySection.style.display = 'block';
             
-            showMessage('记录已添加到历史记录！', 'success');
+            if (!document.querySelector('.duplicate-modal')) {
+                if (serverSaved) {
+                    showMessage('记录已添加到历史记录并同步到服务器！', 'success');
+                } else {
+                    showMessage('记录已添加到历史记录（仅本地保存）', 'warning');
+                }
+            }
         }
 
         // 渲染历史记录表格
@@ -977,8 +1204,7 @@
             
             // 更新批量操作按钮状态
             const hasSelection = count > 0;
-            document.getElementById('exportSelectedPdfBtn').disabled = !hasSelection; // PDF导出按钮（主要）
-            document.getElementById('exportSelectedBtn').disabled = !hasSelection;    // Excel导出按钮（备选）
+            document.getElementById('exportSelectedPdfBtn').disabled = !hasSelection; // 导出文件按钮
             document.getElementById('printSelectedBtn').disabled = !hasSelection;
             document.getElementById('deleteSelectedBtn').disabled = !hasSelection;
         }
@@ -1116,9 +1342,12 @@
                 // 创建临时会话ID
                 const tempSessionId = generateSessionId();
                 
-                showMessage('正在生成PDF文件，请稍候...', 'info');
+                // 显示进度条模态框
+                showProgressModal('正在导出文件...', '正在准备导出数据...');
+                updateProgressModal(10, '正在准备导出数据...');
                 
                 // 发送选中的记录到后端生成PDF
+                updateProgressModal(30, '正在生成Excel文件...');
                 const response = await fetch('/api/export-selected-pdf', {
                     method: 'POST',
                     headers: {
@@ -1136,7 +1365,10 @@
                 });
 
                 if (response.ok) {
+                    updateProgressModal(70, '正在转换为PDF格式...');
                     const blob = await response.blob();
+                    updateProgressModal(90, '正在准备下载...');
+                    
                     const url = window.URL.createObjectURL(blob);
                     const a = document.createElement('a');
                     a.href = url;
@@ -1150,6 +1382,13 @@
                     a.click();
                     document.body.removeChild(a);
                     window.URL.revokeObjectURL(url);
+                    
+                    updateProgressModal(100, '导出完成！');
+                    
+                    // 延迟隐藏进度条，让用户看到完成状态
+                    setTimeout(() => {
+                        hideProgressModal();
+                    }, 1000);
                     
                     let successMessage = `✅ 成功导出 ${selectedIds.length} 条记录为PDF！`;
                     showMessage(successMessage, 'success');
@@ -1171,6 +1410,7 @@
                 }
             } catch (error) {
                 console.error('PDF导出失败:', error);
+                hideProgressModal();
                 showMessage(`PDF导出失败: ${error.message}`, 'danger');
             }
         }
@@ -1186,10 +1426,15 @@
             try {
                 const selectedRecords = historyData.filter(item => selectedIds.includes(item.id));
                 
+                // 显示进度条模态框
+                showProgressModal('正在准备打印...', '正在准备打印数据...');
+                updateProgressModal(10, '正在准备打印数据...');
+                
                 // 创建临时会话ID
                 const tempSessionId = generateSessionId();
                 
                 // 发送选中的记录到后端生成打印页面
+                updateProgressModal(30, '正在生成打印文件...');
                 const response = await fetch('/api/print-selected', {
                     method: 'POST',
                     headers: {
@@ -1202,14 +1447,23 @@
                 });
 
                 if (response.ok) {
+                    updateProgressModal(70, '正在转换为PDF格式...');
                     // 获取PDF文件的blob数据
                     const pdfBlob = await response.blob();
                     
+                    updateProgressModal(90, '正在准备打印窗口...');
                     // 创建PDF文件的URL
                     const pdfUrl = URL.createObjectURL(pdfBlob);
                     
                     // 在新窗口中打开PDF文件
                     const printWindow = window.open(pdfUrl, '_blank');
+                    
+                    updateProgressModal(100, '打印准备完成！');
+                    
+                    // 延迟隐藏进度条
+                    setTimeout(() => {
+                        hideProgressModal();
+                    }, 1000);
                     
                     // 清理URL对象（延迟清理，确保PDF已加载）
                     setTimeout(() => {
@@ -1221,12 +1475,13 @@
                     throw new Error('打印准备失败');
                 }
             } catch (error) {
+                hideProgressModal();
                 showMessage(`打印失败: ${error.message}`, 'danger');
             }
         }
 
         // 删除选中记录
-        function deleteSelected() {
+        async function deleteSelected() {
             const selectedIds = getSelectedRecordIds();
             if (selectedIds.length === 0) {
                 showMessage('请选择要删除的记录！', 'warning');
@@ -1234,6 +1489,11 @@
             }
 
             if (confirm(`确定要删除选中的 ${selectedIds.length} 条记录吗？此操作不可撤销。`)) {
+                // 同时从服务器删除
+                for (const id of selectedIds) {
+                    await deleteHistoryFromServer(id);
+                }
+                
                 historyData = historyData.filter(item => !selectedIds.includes(item.id));
                 saveHistoryData();
                 renderHistoryTable();
@@ -1243,8 +1503,11 @@
         }
 
         // 删除单条记录
-        function deleteRecord(id) {
+        async function deleteRecord(id) {
             if (confirm('确定要删除这条记录吗？此操作不可撤销。')) {
+                // 同时从服务器删除
+                await deleteHistoryFromServer(id);
+                
                 historyData = historyData.filter(item => item.id !== id);
                 saveHistoryData();
                 renderHistoryTable();
@@ -1740,6 +2003,38 @@
             }, 3000);
         }
 
+        // 进度条模态框函数
+        function showProgressModal(title = '正在处理...', status = '请稍候...') {
+            const modal = document.getElementById('progressModal');
+            const titleElement = document.getElementById('progressTitle');
+            const statusElement = document.getElementById('progressStatus');
+            const progressBar = document.getElementById('progressBarModal');
+            
+            titleElement.textContent = title;
+            statusElement.textContent = status;
+            progressBar.style.width = '0%';
+            progressBar.textContent = '0%';
+            
+            modal.style.display = 'flex';
+        }
+
+        function hideProgressModal() {
+            const modal = document.getElementById('progressModal');
+            modal.style.display = 'none';
+        }
+
+        function updateProgressModal(percent, status = '') {
+            const progressBar = document.getElementById('progressBarModal');
+            const statusElement = document.getElementById('progressStatus');
+            
+            progressBar.style.width = percent + '%';
+            progressBar.textContent = percent + '%';
+            
+            if (status) {
+                statusElement.textContent = status;
+            }
+        }
+
         // 本地存储功能
         function saveHistoryData() {
             localStorage.setItem('fileCognizeHistory', JSON.stringify(historyData));
@@ -1754,8 +2049,98 @@
                     renderHistoryTable();
                 }
             }
+            
+            // 同时从服务器加载历史记录
+            loadHistoryFromServer();
+        }
+
+        // 服务器端历史记录管理
+        async function saveHistoryToServer(historyItem) {
+            try {
+                const response = await fetch('/api/save-history', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify(historyItem)
+                });
+
+                if (response.ok) {
+                    console.log(`✅ 历史记录已保存到服务器: ${historyItem.id}`);
+                    return true;
+                } else {
+                    const error = await response.json();
+                    console.warn('服务器保存历史记录失败:', error.error);
+                    return false;
+                }
+            } catch (error) {
+                console.warn('服务器保存历史记录失败:', error);
+                return false;
+            }
+        }
+
+        async function loadHistoryFromServer() {
+            try {
+                const response = await fetch('/api/load-history');
+                if (response.ok) {
+                    const serverHistory = await response.json();
+                    
+                    // 合并服务器和本地历史记录，去重
+                    const mergedHistory = mergeHistoryData(historyData, serverHistory);
+                    
+                    if (mergedHistory.length !== historyData.length) {
+                        historyData = mergedHistory;
+                        saveHistoryData(); // 更新本地存储
+                        renderHistoryTable();
+                        
+                        if (historyData.length > 0) {
+                            historySection.style.display = 'block';
+                        }
+                    }
+                }
+            } catch (error) {
+                console.warn('从服务器加载历史记录失败:', error);
+            }
+        }
+
+        // 合并历史记录数据，去重
+        function mergeHistoryData(localHistory, serverHistory) {
+            const merged = [...localHistory];
+            const existingIds = new Set(localHistory.map(item => item.id));
+            
+            // 添加服务器端不存在于本地的记录
+            serverHistory.forEach(serverItem => {
+                if (!existingIds.has(serverItem.id)) {
+                    merged.push(serverItem);
+                }
+            });
+            
+            // 按时间倒序排列
+            return merged.sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
+        }
+
+        // 删除记录时同时删除服务器端记录
+        async function deleteHistoryFromServer(recordId) {
+            try {
+                await fetch(`/api/delete-history/${recordId}`, {
+                    method: 'DELETE'
+                });
+            } catch (error) {
+                console.warn('服务器删除历史记录失败:', error);
+            }
         }
     </script>
+
+    <!-- 进度条模态框 -->
+    <div id="progressModal" class="progress-modal">
+        <div class="progress-modal-content">
+            <div class="spinner"></div>
+            <h3 id="progressTitle">正在处理...</h3>
+            <div class="progress">
+                <div id="progressBarModal" class="progress-bar" style="width: 0%">0%</div>
+            </div>
+            <div id="progressStatus" class="progress-status">请稍候...</div>
+        </div>
+    </div>
 </body>
-</html> 
 </html> 
