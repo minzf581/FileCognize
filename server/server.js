@@ -53,27 +53,20 @@ async function convertExcelToPDF(excelPath, pdfPath) {
       'XAUTHORITY': '/tmp/.Xauth'
     };
     
-    // 两步转换法：先转换为ODS格式，再转换为PDF
-    // 这样可以确保LibreOffice正确理解表格结构
-    const odsPath = excelPath.replace(/\.xlsx?$/i, '.ods');
+    // 统一使用直接Excel->PDF转换，本地和Railway环境保持一致
+    console.log(`🚀 使用统一的直接Excel->PDF转换方法`);
     
-    console.log(`🔄 第一步：Excel -> ODS格式转换`);
-    const odsCommand = `${libreOfficeCommand} --headless --invisible --nodefault --nolockcheck --nologo --norestore --convert-to ods --outdir "${outputDir}" "${excelPath}"`;
-    console.log(`🔧 执行ODS转换命令: ${odsCommand}`);
+    let command;
+    let inputFile = excelPath;
     
-    // 执行Excel到ODS的转换
-    await execAsync(odsCommand, { env, timeout: 30000 });
-    
-    // 检查ODS文件是否生成成功
-    if (!fs.existsSync(odsPath)) {
-      throw new Error('ODS文件生成失败');
+    // 为不同环境优化LibreOffice参数
+    if (process.env.RAILWAY_ENVIRONMENT) {
+      // Railway环境：添加更多稳定性参数
+      command = `${libreOfficeCommand} --headless --invisible --nodefault --nolockcheck --nologo --norestore --nofirststartwizard --convert-to "pdf:calc_pdf_Export" --outdir "${outputDir}" "${excelPath}"`;
+    } else {
+      // 本地环境：使用标准参数
+      command = `${libreOfficeCommand} --headless --invisible --nodefault --nolockcheck --nologo --norestore --convert-to "pdf:calc_pdf_Export" --outdir "${outputDir}" "${excelPath}"`;
     }
-    
-    console.log(`✅ ODS转换完成: ${odsPath}`);
-    console.log(`🔄 第二步：ODS -> PDF格式转换`);
-    
-    // 为Railway环境优化的LibreOffice命令参数，使用calc_pdf_Export过滤器保持表格格式
-    const command = `${libreOfficeCommand} --headless --invisible --nodefault --nolockcheck --nologo --norestore --convert-to "pdf:calc_pdf_Export" --outdir "${outputDir}" "${odsPath}"`;
     
     console.log(`🔧 执行PDF转换命令: ${command}`);
     console.log(`🖥️ 操作系统: ${process.platform}`);
@@ -136,22 +129,12 @@ async function convertExcelToPDF(excelPath, pdfPath) {
     }
     
     // 检查PDF文件是否生成成功
-    const expectedPdfPath = path.join(outputDir, path.basename(odsPath, path.extname(odsPath)) + '.pdf');
+    const expectedPdfPath = path.join(outputDir, path.basename(inputFile, path.extname(inputFile)) + '.pdf');
     
     if (fs.existsSync(expectedPdfPath)) {
       // 如果生成的PDF文件名与期望的不同，重命名它
       if (expectedPdfPath !== pdfPath) {
         fs.renameSync(expectedPdfPath, pdfPath);
-      }
-      
-      // 清理临时ODS文件
-      try {
-        if (fs.existsSync(odsPath)) {
-          fs.unlinkSync(odsPath);
-          console.log(`🗑️ 临时ODS文件已删除: ${odsPath}`);
-        }
-      } catch (cleanupError) {
-        console.log(`⚠️ 清理ODS文件失败: ${cleanupError.message}`);
       }
       
       console.log(`✅ Excel转PDF完成: ${pdfPath}`);
