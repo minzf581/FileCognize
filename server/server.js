@@ -284,10 +284,10 @@ const DEFAULT_TEMPLATE = {
       outputRow: 11,
       description: '加工内容写入DESCRIZIONE DEI BENI列',
       valueMapping: {
-        'NS .CERNIERE A SCORCIARE': 'NS .CERNIERE A SCORCIARE',
+        'NS .CERNIERE A SCORCIARE': 'CERNIERE DA SCORCIARE',
         'CATENA CONTINUA METALLO MONT,BLOCCHETTO VARIE MIS': 'CATENA CONTINUA METALLO MONT,BLOCCHETTO VARIE MIS',
-        'CERNIERE A MONTARE CURSORE': 'CERNIERE A MONTARE CURSORE',
-        'CERNIERE A MONTARE TIRETTO': 'CERNIERE A MONTARE TIRETTO'
+        'CERNIERE A MONTARE CURSORE': 'CERNIERE DA MONTARE CURSORE',
+        'CERNIERE A MONTARE TIRETTO': 'CERNIERE DA MONTARE TIRETTO'
       }
     }
   }
@@ -314,10 +314,18 @@ function formatRecognizedData(extractedFields) {
     let descrizione = formatted['Descrizione Articolo'].toString().trim();
     const originalDescrizione = descrizione;
     
-    // 替换 "A SCORCIARE" 为 "DA SCORCIARE"
-    if (descrizione.includes('A SCORCIARE')) {
-      descrizione = descrizione.replace(/A SCORCIARE/g, 'DA SCORCIARE');
-      console.log(`📝 替换内容: A SCORCIARE → DA SCORCIARE`);
+    // 替换商品描述的四个类型中的 "A" 为 "DA"
+    if (descrizione.includes('CERNIERE A SCORCIARE')) {
+      descrizione = descrizione.replace(/CERNIERE A SCORCIARE/g, 'CERNIERE DA SCORCIARE');
+      console.log(`📝 替换内容: CERNIERE A SCORCIARE → CERNIERE DA SCORCIARE`);
+    }
+    if (descrizione.includes('CERNIERE A MONTARE CURSORE')) {
+      descrizione = descrizione.replace(/CERNIERE A MONTARE CURSORE/g, 'CERNIERE DA MONTARE CURSORE');
+      console.log(`📝 替换内容: CERNIERE A MONTARE CURSORE → CERNIERE DA MONTARE CURSORE`);
+    }
+    if (descrizione.includes('CERNIERE A MONTARE TIRETTO')) {
+      descrizione = descrizione.replace(/CERNIERE A MONTARE TIRETTO/g, 'CERNIERE DA MONTARE TIRETTO');
+      console.log(`📝 替换内容: CERNIERE A MONTARE TIRETTO → CERNIERE DA MONTARE TIRETTO`);
     }
     
     // 后面加上"DDT"表示单据
@@ -427,14 +435,14 @@ function analyzeTemplateStructure(text) {
         foundDescription = 'CATENA CONTINUA METALLO MONT,BLOCCHETTO VARIE MIS';
         console.log('✅ 标准化匹配到: CATENA CONTINUA METALLO');
       } else if (/NS.*CERNIERE.*SCORCIARE/i.test(text)) {
-        foundDescription = 'NS .CERNIERE A SCORCIARE';
-        console.log('✅ 标准化匹配到: NS CERNIERE A SCORCIARE');
+        foundDescription = 'CERNIERE DA SCORCIARE';
+        console.log('✅ 标准化匹配到: CERNIERE DA SCORCIARE');
       } else if (/CERNIERE.*CURSORE/i.test(text)) {
-        foundDescription = 'CERNIERE A MONTARE CURSORE';
-        console.log('✅ 标准化匹配到: CERNIERE CURSORE');
+        foundDescription = 'CERNIERE DA MONTARE CURSORE';
+        console.log('✅ 标准化匹配到: CERNIERE DA MONTARE CURSORE');
       } else if (/CERNIERE.*TIRETTO/i.test(text)) {
-        foundDescription = 'CERNIERE A MONTARE TIRETTO';
-        console.log('✅ 标准化匹配到: CERNIERE TIRETTO');
+        foundDescription = 'CERNIERE DA MONTARE TIRETTO';
+        console.log('✅ 标准化匹配到: CERNIERE DA MONTARE TIRETTO');
       }
     }
 
@@ -1664,20 +1672,29 @@ async function exportSessionWithExcelJS(templatePath, outputPath, sessionData) {
         const cellB = worksheet.getCell(`B${currentRow}`);
         const cellG = worksheet.getCell(`G${currentRow}`);
         
-        // 直接设置值，不创建新的样式对象
+        // 设置单元格值和对齐格式
         cellA.value = quantita;
         
-        // 处理Descrizione列的DDT对齐
+        // 处理Descrizione列：主要内容左对齐，DDT右对齐
         if (descrizione && descrizione.endsWith(' DDT')) {
           // 分离主要内容和DDT
-          const mainContent = descrizione.substring(0, descrizione.length - 4); // 去掉 " DDT"
+          const mainContent = descrizione.substring(0, descrizione.length - 4).trim(); // 去掉 " DDT"
           
-          // 使用空格填充来实现DDT右对齐效果
-          // 根据单元格宽度估算需要的空格数（B列通常比较宽）
-          const paddingSpaces = ' '.repeat(Math.max(0, 50 - mainContent.length));
-          cellB.value = mainContent + paddingSpaces + 'DDT';
+          // 设置B列内容：主要内容左对齐，DDT靠右
+          cellB.value = mainContent + '                                             DDT';
+          
+          // 设置单元格左对齐
+          cellB.alignment = { 
+            horizontal: 'left',
+            vertical: 'middle'
+          };
         } else {
           cellB.value = descrizione;
+          // 设置B列左对齐
+          cellB.alignment = { 
+            horizontal: 'left',
+            vertical: 'middle'
+          };
         }
         
         cellG.value = numeroDoc;
@@ -1801,20 +1818,29 @@ async function exportSelectedWithExcelJS(templatePath, outputPath, records) {
         const cellB = worksheet.getCell(`B${currentRow}`);
         const cellG = worksheet.getCell(`G${currentRow}`);
         
-        // 直接设置值，不创建新的样式对象
+        // 设置单元格值和对齐格式
         cellA.value = quantita;
         
-        // 处理Descrizione列的DDT对齐
+        // 处理Descrizione列：主要内容左对齐，DDT右对齐
         if (descrizione && descrizione.endsWith(' DDT')) {
           // 分离主要内容和DDT
-          const mainContent = descrizione.substring(0, descrizione.length - 4); // 去掉 " DDT"
+          const mainContent = descrizione.substring(0, descrizione.length - 4).trim(); // 去掉 " DDT"
           
-          // 使用空格填充来实现DDT右对齐效果
-          // 根据单元格宽度估算需要的空格数（B列通常比较宽）
-          const paddingSpaces = ' '.repeat(Math.max(0, 50 - mainContent.length));
-          cellB.value = mainContent + paddingSpaces + 'DDT';
+          // 设置B列内容：主要内容左对齐，DDT靠右
+          cellB.value = mainContent + '                                             DDT';
+          
+          // 设置单元格左对齐
+          cellB.alignment = { 
+            horizontal: 'left',
+            vertical: 'middle'
+          };
         } else {
           cellB.value = descrizione;
+          // 设置B列左对齐
+          cellB.alignment = { 
+            horizontal: 'left',
+            vertical: 'middle'
+          };
         }
         
         cellG.value = numeroDoc;

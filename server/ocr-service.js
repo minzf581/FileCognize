@@ -2,12 +2,12 @@ const Tesseract = require('tesseract.js');
 const fs = require('fs');
 const path = require('path');
 
-// 固定的Descrizione Articolo选项
+// 固定的Descrizione Articolo选项（已更新为DA格式）
 const DESCRIZIONE_OPTIONS = [
-    'NS .CERNIERE A SCORCIARE',
+    'CERNIERE DA SCORCIARE',
     'CATENA CONTINUA METALLO MONT,BLOCCHETTO VARIE MIS',
-    'CERNIERE A MONTARE CURSORE',
-    'CERNIERE A MONTARE TIRETTO'
+    'CERNIERE DA MONTARE CURSORE',
+    'CERNIERE DA MONTARE TIRETTO'
 ];
 
 class OCRService {
@@ -229,14 +229,14 @@ class OCRService {
             console.log('✅ 关键词匹配: CATENA CONTINUA (通用)');
             return 'CATENA CONTINUA METALLO MONT,BLOCCHETTO VARIE MIS';
         } else if (normalizedText.includes('CERNIERE') && normalizedText.includes('SCORCIARE')) {
-            console.log('✅ 关键词匹配: NS CERNIERE A SCORCIARE');
-            return 'NS .CERNIERE A SCORCIARE';
+            console.log('✅ 关键词匹配: CERNIERE DA SCORCIARE');
+            return 'CERNIERE DA SCORCIARE';
         } else if (normalizedText.includes('CERNIERE') && normalizedText.includes('CURSORE')) {
-            console.log('✅ 关键词匹配: CERNIERE A MONTARE CURSORE');
-            return 'CERNIERE A MONTARE CURSORE';
+            console.log('✅ 关键词匹配: CERNIERE DA MONTARE CURSORE');
+            return 'CERNIERE DA MONTARE CURSORE';
         } else if (normalizedText.includes('CERNIERE') && normalizedText.includes('TIRETTO')) {
-            console.log('✅ 关键词匹配: CERNIERE A MONTARE TIRETTO');
-            return 'CERNIERE A MONTARE TIRETTO';
+            console.log('✅ 关键词匹配: CERNIERE DA MONTARE TIRETTO');
+            return 'CERNIERE DA MONTARE TIRETTO';
         }
 
         console.log('❌ 未找到匹配的Descrizione Articolo');

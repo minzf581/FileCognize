@@ -843,10 +843,18 @@
             if (formatted['Descrizione Articolo'] && formatted['Descrizione Articolo'] !== '未识别') {
                 let descrizione = formatted['Descrizione Articolo'].toString().trim();
                 
-                // 替换 "A SCORCIARE" 为 "DA SCORCIARE"
-                if (descrizione.includes('A SCORCIARE')) {
-                    descrizione = descrizione.replace('A SCORCIARE', 'DA SCORCIARE');
-                    console.log(`📝 替换内容: A SCORCIARE → DA SCORCIARE`);
+                // 替换商品描述的四个类型中的 "A" 为 "DA"
+                if (descrizione.includes('CERNIERE A SCORCIARE')) {
+                    descrizione = descrizione.replace(/CERNIERE A SCORCIARE/g, 'CERNIERE DA SCORCIARE');
+                    console.log(`📝 替换内容: CERNIERE A SCORCIARE → CERNIERE DA SCORCIARE`);
+                }
+                if (descrizione.includes('CERNIERE A MONTARE CURSORE')) {
+                    descrizione = descrizione.replace(/CERNIERE A MONTARE CURSORE/g, 'CERNIERE DA MONTARE CURSORE');
+                    console.log(`📝 替换内容: CERNIERE A MONTARE CURSORE → CERNIERE DA MONTARE CURSORE`);
+                }
+                if (descrizione.includes('CERNIERE A MONTARE TIRETTO')) {
+                    descrizione = descrizione.replace(/CERNIERE A MONTARE TIRETTO/g, 'CERNIERE DA MONTARE TIRETTO');
+                    console.log(`📝 替换内容: CERNIERE A MONTARE TIRETTO → CERNIERE DA MONTARE TIRETTO`);
                 }
                 
                 // 后面加上"DDT"表示单据
